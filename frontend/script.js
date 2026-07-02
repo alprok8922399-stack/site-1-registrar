@@ -23,7 +23,7 @@ async function registerAutomatedUser() {
     try {
         // ВНИМАНИЕ: URL Сайта №2 мы временно ставим локальный, 
         // позже заменим его на реальную ссылку от Render!
-        const response = await fetch('http://localhost:5000/api/register', {
+        const response = await fetch('https://site-2-tree.onrender.com/api/register', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
