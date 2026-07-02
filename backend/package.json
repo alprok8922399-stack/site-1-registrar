@@ -1,0 +1,12 @@
+{
+  "name": "site-1-registrar-backend",
+  "version": "1.0.0",
+  "description": "Сервер раздачи для Сайта №1 (Регистратор)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
