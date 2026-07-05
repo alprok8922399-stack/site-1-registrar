@@ -1,63 +1,40 @@
-const SERVER_1_URL = 'https://site-2-tree.onrender.com';
-
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
-let isRunning = false;
 
-async function checkStatus() {
-    try {
-        const response = await fetch(`${SERVER_1_URL}/api/robot/status`);
-        if (!response.ok) throw new Error('Ответ сети не OK');
-        const data = await response.json();
-        
-        isRunning = data.active;
-        updateUI();
-    } catch (err) {
-        console.error("Ошибка проверки статуса:", err);
-        statusLabel.innerText = "Сбой связи с сервером 1";
-        statusLabel.className = "status-box";
-        actionBtn.innerText = "Повторить проверку";
-    }
-}
-
-function updateUI() {
-    if (isRunning) {
-        statusLabel.innerText = "РОБОТ РАБОТАЕТ";
-        statusLabel.className = "status-box active";
-        actionBtn.innerText = "Остановить регистрацию";
+// Функция для обновления интерфейса
+function updateUI(isActive) {
+    if (isActive) {
+        statusLabel.textContent = "Робот работает";
+        statusLabel.classList.add('active');
+        actionBtn.textContent = "ОСТАНОВИТЬ РОБОТА";
         actionBtn.className = "btn stop";
     } else {
-        statusLabel.innerText = "РОБОТ ОСТАНОВЛЕН";
-        statusLabel.className = "status-box";
-        actionBtn.innerText = "Начать регистрацию";
+        statusLabel.textContent = "Робот остановлен";
+        statusLabel.classList.remove('active');
+        actionBtn.textContent = "ЗАПУСТИТЬ РОБОТА";
         actionBtn.className = "btn";
     }
 }
 
-actionBtn.addEventListener('click', async () => {
-    const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
-    
-    actionBtn.disabled = true;
-    actionBtn.innerText = "Обработка...";
-    
-    try {
-        const response = await fetch(`${SERVER_1_URL}${endpoint}`, { method: 'POST' });
-        const data = await response.json();
-        
-        if (data.success) {
-            isRunning = !isRunning;
-        } else {
-            alert(data.message || "Ошибка сервера");
-        }
-    } catch (err) {
-        alert("Не удалось отправить команду: " + err.message);
-    } finally {
-        actionBtn.disabled = false;
-        updateUI();
-    }
-});
+// Проверка статуса при загрузке страницы
+fetch('/api/robot/status')
+    .then(res => res.json())
+    .then(data => updateUI(data.running))
+    .catch(() => statusLabel.textContent = "Ошибка соединения");
 
-// Первая проверка при старте
-checkStatus();
-// Синхронизация каждые 3 секунды
-setInterval(checkStatus, 3000);
+// Обработка нажатия на кнопку
+actionBtn.addEventListener('click', () => {
+    const isRunning = statusLabel.classList.contains('active');
+    const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
+
+    fetch(endpoint, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Если запрос прошел, обновляем статус с сервера
+                fetch('/api/robot/status')
+                    .then(res => res.json())
+                    .then(data => updateUI(data.running));
+            }
+        });
+});
