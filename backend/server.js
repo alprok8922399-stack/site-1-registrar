@@ -1,10 +1,22 @@
 const express = require('express');
+const https = require('https'); // Встроенный модуль Node.js, не требует установки
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(express.json());
 
-// Отдаем статический фронтенд, если он лежит в папке frontend на уровень выше
+// Включаем CORS через чистые заголовки, чтобы фронтенд всегда мог достучаться
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
+// Отдаем статический фронтенд
 app.use(express.static('../frontend'));
 
 // Жестко прописываем адрес бэкенда Второго сайта на Render
@@ -13,7 +25,6 @@ const SITE_2_URL = "https://site-2-tree.onrender.com";
 let isRobotActive = false;
 let robotIntervalId = null;
 
-// Генератор случайных ников для маркетплейса
 function generateRandomUsername() {
     const prefixes = ['buyer', 'client', 'user', 'guest', 'alpha', 'rich', 'lucky', 'partner', 'shop', 'crypto'];
     const randomNumber = Math.floor(1000 + Math.random() * 9000);
@@ -21,7 +32,43 @@ function generateRandomUsername() {
     return `${randomPrefix}_${randomNumber}`;
 }
 
-// Внутренняя функция, которая выполняет один полный цикл: Регистрация -> Оплата
+// Вспомогательная функция для отправки POST запросов через встроенный модуль https
+function sendPostRequest(url, data) {
+    return new Promise((resolve, reject) => {
+        const payload = JSON.stringify(data);
+        const options = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(payload)
+            },
+            timeout: 10000
+        };
+
+        const req = https.request(url, options, (res) => {
+            let responseBody = '';
+            res.on('data', (chunk) => responseBody += chunk);
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(responseBody);
+                    resolve({ ok: res.statusCode >= 200 && res.statusCode < 300, data: parsed });
+                } catch (e) {
+                    resolve({ ok: false, data: { error: 'Некорректный JSON ответа' } });
+                }
+            });
+        });
+
+        req.on('error', (err) => reject(err));
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Превышено время ожидания запроса'));
+        });
+        req.write(payload);
+        req.end();
+    });
+}
+
+// Внутренний цикл робота
 async function executeRobotCycle() {
     if (!isRobotActive) return;
 
@@ -29,88 +76,72 @@ async function executeRobotCycle() {
     console.log(`[РОБОТ] Шаг 1: Покупатель ${currentUsername} зашел на маркетплейс.`);
 
     try {
-        // 1. Отправляем скрытый запрос на регистрацию на Сайт №2
-        const regResponse = await fetch(`${SITE_2_URL}/api/shop/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUsername })
-        });
+        // 1. Регистрация
+        const regResult = await sendPostRequest(`${SITE_2_URL}/api/shop/register`, { username: currentUsername });
 
-        const regData = await regResponse.json();
-
-        if (!regResponse.ok) {
-            console.log(`[РОБОТ X] Ошибка регистрации: ${regData.error || 'Сбой API'}`);
+        if (!regResult.ok) {
+            console.log(`[РОБОТ X] Ошибка регистрации: ${regResult.data.error || 'Сбой API'}`);
             return;
         }
 
-        console.log(`[РОБОТ] Шаг 2: ${currentUsername} зарегистрирован. Выбирает товар (имитация 3 сек)...`);
+        console.log(`[РОБОТ] Шаг 2: ${currentUsername} зарегистрирован. Выбирает товар (3 сек)...`);
 
-        // Ждем ровно 3 секунды внутри процесса перед оплатой товара
+        // Ждем 3 секунды перед оплатой
         setTimeout(async () => {
             if (!isRobotActive) return;
-            console.log(`[РОБОТ] Шаг 3: Покупатель ${currentUsername} нажал кнопку "ОПЛАТИТЬ" товар.`);
+            console.log(`[РОБОТ] Шаг 3: Покупатель ${currentUsername} нажимает "ОПЛАТИТЬ".`);
 
             try {
-                // 2. Отправляем скрытый запрос на оплату на Сайт №2
-                const payResponse = await fetch(`${SITE_2_URL}/api/shop/pay`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: currentUsername, amount: 10000 })
-                });
+                // 2. Оплата
+                const payResult = await sendPostRequest(`${SITE_2_URL}/api/shop/pay`, { username: currentUsername, amount: 10000 });
 
-                const payData = await payResponse.json();
-
-                if (!payResponse.ok) {
-                    console.log(`[РОБОТ X] Ошибка оплаты: ${payData.error || 'Сбой API'}`);
+                if (!payResult.ok) {
+                    console.log(`[РОБОТ X] Ошибка оплаты: ${payResult.data.error || 'Сбой API'}`);
                 } else {
-                    console.log(`[РОБОТ 💰] УСПЕХ! Товар оплачен, ник ${currentUsername} встал в ячейку ${payData.cellLabel || 'матрицы'}`);
+                    console.log(`[РОБОТ 💰] УСПЕХ! Товар оплачен, ник ${currentUsername} встал в ячейку матрицы.`);
                 }
             } catch (payErr) {
-                console.log(`[РОБОТ X] Ошибка сети при оплате: ${payErr.message}`);
+                console.log(`[РОБОТ X] Сбой сети при оплате: ${payErr.message}`);
             }
         }, 3000);
 
     } catch (regErr) {
-        console.log(`[РОБОТ X] Ошибка сети при регистрации: ${regErr.message}`);
+        console.log(`[РОБОТ X] Сбой сети при регистрации: ${regErr.message}`);
     }
 }
 
 // ==========================================
-// ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ РОБОТОМ НА САЙТЕ 1
+// ЭНДПОИНТЫ УПРАВЛЕНИЯ
 // ==========================================
 
-// Статус робота
 app.get('/api/robot/status', (req, res) => {
     res.json({ active: isRobotActive });
 });
 
-// Запуск робота с интервалом в 3 секунды
 app.post('/api/robot/start', (req, res) => {
     if (isRobotActive) {
         return res.json({ success: false, message: "Робот уже работает" });
     }
-    
     isRobotActive = true;
-    console.log("[СЕРВЕР 1] Автоматический регистратор успешно ЗАПУЩЕН.");
+    console.log("[СЕРВЕР 1] Робот ЗАПУЩЕН.");
     
     executeRobotCycle();
-    robotIntervalId = setInterval(executeRobotCycle, 3000);
+    robotIntervalId = setInterval(executeRobotCycle, 6000); // 6 секунд на полный цикл (3 сек выбор + 3 сек запас)
     
     res.json({ success: true, message: "Робот запущен" });
 });
 
-// Остановить робота
 app.post('/api/robot/stop', (req, res) => {
     if (!isRobotActive) {
-        return res.json({ success: false, message: "Робот уже остановлен" });
+        res.json({ success: false, message: "Робот уже остановлен" });
+        return;
     }
-    
     isRobotActive = false;
     if (robotIntervalId) {
         clearInterval(robotIntervalId);
         robotIntervalId = null;
     }
-    console.log("[СЕРВЕР 1] Автоматический регистратор ОСТАНОВЛЕН.");
+    console.log("[СЕРВЕР 1] Робот ОСТАНОВЛЕН.");
     res.json({ success: true, message: "Робот остановлен" });
 });
 
