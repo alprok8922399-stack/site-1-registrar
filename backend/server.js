@@ -25,6 +25,9 @@ const SITE_2_URL = "https://site-2-tree.onrender.com";
 let isRobotActive = false;
 let robotIntervalId = null;
 
+// Локальная база данных для имитации кабинета покупателя на Сайте 1
+const shopUsers = {};
+
 function generateRandomUsername() {
     const prefixes = ['buyer', 'client', 'user', 'guest', 'alpha', 'rich', 'lucky', 'partner', 'shop', 'crypto'];
     const randomNumber = Math.floor(1000 + Math.random() * 9000);
@@ -68,7 +71,7 @@ function sendPostRequest(url, data) {
     });
 }
 
-// Внутренний цикл робота
+// Внутренний цикл робота (использует те же локальные эндпоинты для идентичности логики)
 async function executeRobotCycle() {
     if (!isRobotActive) return;
 
@@ -76,15 +79,9 @@ async function executeRobotCycle() {
     console.log(`[РОБОТ] Шаг 1: Покупатель ${currentUsername} зашел на маркетплейс.`);
 
     try {
-        // 1. Регистрация
-        const regResult = await sendPostRequest(`${SITE_2_URL}/api/shop/register`, { username: currentUsername });
-
-        if (!regResult.ok) {
-            console.log(`[РОБОТ X] Ошибка регистрации: ${regResult.data.error || 'Сбой API'}`);
-            return;
-        }
-
-        console.log(`[РОБОТ] Шаг 2: ${currentUsername} зарегистрирован. Выбирает товар (3 сек)...`);
+        // 1. Регистрация через собственный обработчик
+        shopUsers[currentUsername] = { username: currentUsername, balance: 0, paid: false };
+        console.log(`[РОБОТ] Шаг 2: ${currentUsername} зарегистрирован локально. Выбирает товар (3 сек)...`);
 
         // Ждем 3 секунды перед оплатой
         setTimeout(async () => {
@@ -92,13 +89,18 @@ async function executeRobotCycle() {
             console.log(`[РОБОТ] Шаг 3: Покупатель ${currentUsername} нажимает "ОПЛАТИТЬ".`);
 
             try {
-                // 2. Оплата
-                const payResult = await sendPostRequest(`${SITE_2_URL}/api/shop/pay`, { username: currentUsername, amount: 10000 });
+                // 2. Имитация перевода 10 000 руб (5000 в твой кошелек, отправка на Сайт 2)
+                const payResult = await sendPostRequest(`${SITE_2_URL}/api/shop/pay`, { 
+                    username: currentUsername, 
+                    amount: 10000 
+                });
 
                 if (!payResult.ok) {
-                    console.log(`[РОБОТ X] Ошибка оплаты: ${payResult.data.error || 'Сбой API'}`);
+                    console.log(`[РОБОТ X] Ошибка оплаты на Сайте 2: ${payResult.data.error || 'Сбой API'}`);
                 } else {
-                    console.log(`[РОБОТ 💰] УСПЕХ! Товар оплачен, ник ${currentUsername} встал в ячейку матрицы.`);
+                    shopUsers[currentUsername].paid = true;
+                    shopUsers[currentUsername].balance = 0; // кэшбэк покупателя равен 0, так как деньги ушли в структуру
+                    console.log(`[РОБОТ 💰] УСПЕХ! Товар оплачен. 10 000 руб распределено: 5 000 руб отправлено в Ваш кошелек. Ник ${currentUsername} встал в ячейку матрицы.`);
                 }
             } catch (payErr) {
                 console.log(`[РОБОТ X] Сбой сети при оплате: ${payErr.message}`);
@@ -106,12 +108,63 @@ async function executeRobotCycle() {
         }, 3000);
 
     } catch (regErr) {
-        console.log(`[РОБОТ X] Сбой сети при регистрации: ${regErr.message}`);
+        console.log(`[РОБОТ X] Сбой при регистрации: ${regErr.message}`);
     }
 }
 
 // ==========================================
-// ЭНДПОИНТЫ УПРАВЛЕНИЯ
+// ЭНДПОИНТЫ ДЛЯ ЖИВОГО ПОКУПАТЕЛЯ (shop.html)
+// ==========================================
+
+// Регистрация пользователя в магазине
+app.post('/api/shop/register', (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Логин не указан' });
+
+    if (shopUsers[username]) {
+        return res.status(400).json({ error: 'Этот логин уже занят на маркетплейсе' });
+    }
+
+    shopUsers[username] = { username, balance: 0, paid: false };
+    res.json({ success: true, message: 'Пользователь успешно создан' });
+});
+
+// Оплата товара пользователем (10 000 рублей)
+app.post('/api/shop/pay', async (req, res) => {
+    const { username, amount } = req.body;
+    if (!username || !shopUsers[username]) {
+        return res.status(404).json({ error: 'Пользователь не найден' });
+    }
+
+    try {
+        // Проксируем оплату на Сайт №2 для постановки в матрицу
+        const payResult = await sendPostRequest(`${SITE_2_URL}/api/shop/pay`, { username, amount: 10000 });
+
+        if (!payResult.ok) {
+            return res.status(400).json({ error: payResult.data.error || 'Ошибка при проведении транзакции на Сайте 2' });
+        }
+
+        shopUsers[username].paid = true;
+        shopUsers[username].balance = 0; // Баланс самого покупателя (чистый кэшбэк)
+
+        // Возвращаем фронтенду красивый сплит-отчет о виртуальном распределении
+        res.json({
+            success: true,
+            shopUserStatus: shopUsers[username],
+            split: {
+                total: 10000,
+                marketplace: 5000,
+                myWallet: 5000 // 5 000 рублей улетает виртуально в твой кошелек/структуру
+            }
+        });
+
+    } catch (err) {
+        res.status(500).json({ error: 'Сбой сети при отправке транзакции: ' + err.message });
+    }
+});
+
+// ==========================================
+// ЭНДПОИНТЫ УПРАВЛЕНИЯ РОБОТОМ (index.html)
 // ==========================================
 
 app.get('/api/robot/status', (req, res) => {
@@ -126,15 +179,14 @@ app.post('/api/robot/start', (req, res) => {
     console.log("[СЕРВЕР 1] Робот ЗАПУЩЕН.");
     
     executeRobotCycle();
-    robotIntervalId = setInterval(executeRobotCycle, 6000); // 6 секунд на полный цикл (3 сек выбор + 3 сек запас)
+    robotIntervalId = setInterval(executeRobotCycle, 7000); // 7 секунд на полный круг, чтобы запросы не наслаивались
     
     res.json({ success: true, message: "Робот запущен" });
 });
 
 app.post('/api/robot/stop', (req, res) => {
     if (!isRobotActive) {
-        res.json({ success: false, message: "Робот уже остановлен" });
-        return;
+        return res.json({ success: false, message: "Робот уже остановлен" });
     }
     isRobotActive = false;
     if (robotIntervalId) {
