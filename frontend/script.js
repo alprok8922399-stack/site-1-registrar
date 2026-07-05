@@ -1,5 +1,6 @@
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
+const API_URL = 'http://localhost:5000'; // Адрес, где запущен сервер Сайта 2
 
 // Функция для обновления интерфейса
 function updateUI(isActive) {
@@ -17,7 +18,7 @@ function updateUI(isActive) {
 }
 
 // Проверка статуса при загрузке страницы
-fetch('/api/robot/status')
+fetch(`${API_URL}/api/robot/status`)
     .then(res => res.json())
     .then(data => updateUI(data.running))
     .catch(() => statusLabel.textContent = "Ошибка соединения");
@@ -27,12 +28,12 @@ actionBtn.addEventListener('click', () => {
     const isRunning = statusLabel.classList.contains('active');
     const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
 
-    fetch(endpoint, { method: 'POST' })
+    fetch(`${API_URL}${endpoint}`, { method: 'POST' })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
                 // Если запрос прошел, обновляем статус с сервера
-                fetch('/api/robot/status')
+                fetch(`${API_URL}/api/robot/status`)
                     .then(res => res.json())
                     .then(data => updateUI(data.running));
             }
