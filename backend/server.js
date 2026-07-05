@@ -1,11 +1,11 @@
 const express = require('express');
-const cors = require('cors');
-const fetch = require('node-fetch'); // Убедись, что node-fetch установлен, либо используй встроенный глобальный fetch, если NodeJS версии 18+
 const app = express();
-const PORT = process.env.PORT || 4000; // Сайт 1 работает на порту 4000 или порту от Render
+const PORT = process.env.PORT || 4000;
 
-app.use(cors());
 app.use(express.json());
+
+// Отдаем статический фронтенд, если он лежит в папке frontend на уровень выше
+app.use(express.static('../frontend'));
 
 // Жестко прописываем адрес бэкенда Второго сайта на Render
 const SITE_2_URL = "https://site-2-tree.onrender.com";
@@ -84,7 +84,7 @@ app.get('/api/robot/status', (req, res) => {
     res.json({ active: isRobotActive });
 });
 
-// Запуск робота с интервалом в 3 секунды между генерациями новых людей
+// Запуск робота с интервалом в 3 секунды
 app.post('/api/robot/start', (req, res) => {
     if (isRobotActive) {
         return res.json({ success: false, message: "Робот уже работает" });
@@ -93,10 +93,7 @@ app.post('/api/robot/start', (req, res) => {
     isRobotActive = true;
     console.log("[СЕРВЕР 1] Автоматический регистратор успешно ЗАПУЩЕН.");
     
-    // Сразу делаем первый цикл
     executeRobotCycle();
-    
-    // Каждые 3 секунды запускаем регистрацию нового случайного клиента
     robotIntervalId = setInterval(executeRobotCycle, 3000);
     
     res.json({ success: true, message: "Робот запущен" });
