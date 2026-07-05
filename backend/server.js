@@ -1,156 +1,120 @@
 const express = require('express');
+const cors = require('cors');
+const fetch = require('node-fetch'); // Убедись, что node-fetch установлен, либо используй встроенный глобальный fetch, если NodeJS версии 18+
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000; // Сайт 1 работает на порту 4000 или порту от Render
 
+app.use(cors());
 app.use(express.json());
 
-// Разрешаем CORS-запросы, чтобы ваш рабочий фронтенд мог свободно забирать матрицу
-app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
+// Жестко прописываем адрес бэкенда Второго сайта на Render
+const SITE_2_URL = "https://site-2-tree.onrender.com";
 
-// Глобальная база данных с тремя предустановленными муляжами для правильного отображения картинки
-let treeDatabase = {
-    "A1": { id: "A1", user: "МУЛЯЖ_1", parent: null },
-    "B1": { id: "B1", user: "МУЛЯЖ_2", parent: "A1" },
-    "B2": { id: "B2", user: "МУЛЯЖ_3", parent: "A1" }
-};
+let isRobotActive = false;
+let robotIntervalId = null;
 
-let isRobotRunning = false;
-let robotUserIndex = 1;
-let robotTimer = null;
-
-// Точная копия функции генерации уровней букв из вашего фронтенда (A -> B -> C ... Z -> AA)
-function getNextLevelLetter(letter) {
-    let i = letter.length - 1;
-    while (i >= 0) {
-        if (letter[i] !== 'Z') {
-            return letter.substring(0, i) + String.fromCharCode(letter.charCodeAt(i) + 1) + 'A'.repeat(letter.length - 1 - i);
-        }
-        i--;
-    }
-    return 'A'.repeat(letter.length + 1);
+// Генератор случайных ников для маркетплейса
+function generateRandomUsername() {
+    const prefixes = ['buyer', 'client', 'user', 'guest', 'alpha', 'rich', 'lucky', 'partner', 'shop', 'crypto'];
+    const randomNumber = Math.floor(1000 + Math.random() * 9000);
+    const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    return `${randomPrefix}_${randomNumber}`;
 }
 
-// Поиск первой свободной ячейки по алгоритму бинарного дерева. Пропускает занятые муляжи
-function findFirstEmptyCellId() {
-    let queue = ["A1"];
-    let visited = new Set();
+// Внутренняя функция, которая выполняет один полный цикл: Регистрация -> Оплата
+async function executeRobotCycle() {
+    if (!isRobotActive) return;
 
-    while (queue.length > 0) {
-        const currentId = queue.shift();
-        if (visited.has(currentId)) continue;
-        visited.add(currentId);
+    const currentUsername = generateRandomUsername();
+    console.log(`[РОБОТ] Шаг 1: Покупатель ${currentUsername} зашел на маркетплейс.`);
 
-        const cell = treeDatabase[currentId];
-        // Если ячейка пустая — это наше целевое место. Благодаря муляжам, первыми заполнятся C1, C2, C3, C4
-        if (!cell || !cell.user) {
-            return currentId;
+    try {
+        // 1. Отправляем скрытый запрос на регистрацию на Сайт №2
+        const regResponse = await fetch(`${SITE_2_URL}/api/shop/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUsername })
+        });
+
+        const regData = await regResponse.json();
+
+        if (!regResponse.ok) {
+            console.log(`[РОБОТ X] Ошибка регистрации: ${regData.error || 'Сбой API'}`);
+            return;
         }
 
-        const match = currentId.match(/^([A-Z]+)(\d+)$/);
-        if (match) {
-            const letter = match[1];
-            const num = parseInt(match[2], 10);
-            
-            const nextLetter = getNextLevelLetter(letter);
-            const leftChildId = `${nextLetter}${num * 2 - 1}`;
-            const rightChildId = `${nextLetter}${num * 2}`;
+        console.log(`[РОБОТ] Шаг 2: ${currentUsername} зарегистрирован. Выбирает товар (имитация 3 сек)...`);
 
-            if (!treeDatabase[leftChildId]) {
-                treeDatabase[leftChildId] = { id: leftChildId, user: null, parent: currentId };
-            }
-            if (!treeDatabase[rightChildId]) {
-                treeDatabase[rightChildId] = { id: rightChildId, user: null, parent: currentId };
-            }
+        // Ждем ровно 3 секунды внутри процесса перед оплатой товара
+        setTimeout(async () => {
+            if (!isRobotActive) return;
+            console.log(`[РОБОТ] Шаг 3: Покупатель ${currentUsername} нажал кнопку "ОПЛАТИТЬ" товар.`);
 
-            queue.push(leftChildId);
-            queue.push(rightChildId);
-        }
+            try {
+                // 2. Отправляем скрытый запрос на оплату на Сайт №2
+                const payResponse = await fetch(`${SITE_2_URL}/api/shop/pay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUsername, amount: 10000 })
+                });
+
+                const payData = await payResponse.json();
+
+                if (!payResponse.ok) {
+                    console.log(`[РОБОТ X] Ошибка оплаты: ${payData.error || 'Сбой API'}`);
+                } else {
+                    console.log(`[РОБОТ 💰] УСПЕХ! Товар оплачен, ник ${currentUsername} встал в ячейку ${payData.cellLabel || 'матрицы'}`);
+                }
+            } catch (payErr) {
+                console.log(`[РОБОТ X] Ошибка сети при оплате: ${payErr.message}`);
+            }
+        }, 3000);
+
+    } catch (regErr) {
+        console.log(`[РОБОТ X] Ошибка сети при регистрации: ${regErr.message}`);
     }
-    return "C1";
 }
 
-// Эндпоинт получения дерева для админки
-app.get('/api/tree', (req, res) => {
-    res.json(treeDatabase);
+// ==========================================
+// ЭНДПОИНТЫ ДЛЯ УПРАВЛЕНИЯ РОБОТОМ НА САЙТЕ 1
+// ==========================================
+
+// Статус робота
+app.get('/api/robot/status', (req, res) => {
+    res.json({ active: isRobotActive });
 });
 
-// Имитация регистрации
-app.post('/api/shop/register', (req, res) => {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'Имя не указано' });
-    
-    const exists = Object.values(treeDatabase).some(cell => cell && cell.user === username);
-    if (exists) return res.json({ error: 'Пользователь уже зарегистрирован' });
-
-    res.json({ success: true, username });
-});
-
-// Имитация покупки товара и автоматической вставки в дерево
-app.post('/api/shop/pay', (req, res) => {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ error: 'Имя не указано' });
-
-    const targetId = findFirstEmptyCellId();
-    if (!treeDatabase[targetId]) {
-        treeDatabase[targetId] = { id: targetId, user: null, parent: null };
+// Запуск робота с интервалом в 3 секунды между генерациями новых людей
+app.post('/api/robot/start', (req, res) => {
+    if (isRobotActive) {
+        return res.json({ success: false, message: "Робот уже работает" });
     }
     
-    treeDatabase[targetId].user = username;
-    res.json({ success: true, cellId: targetId, user: username });
-});
-
-// Сброс базы данных обратно к трем стартовым муляжам
-app.post('/api/reset', (req, res) => {
-    treeDatabase = {
-        "A1": { id: "A1", user: "МУЛЯЖ_1", parent: null },
-        "B1": { id: "B1", user: "МУЛЯЖ_2", parent: "A1" },
-        "B2": { id: "B2", user: "МУЛЯЖ_3", parent: "A1" }
-    };
-    robotUserIndex = 1;
-    res.json({ success: true });
-});
-
-// Запуск серверного робота-автомата
-app.get('/api/robot/start', (req, res) => {
-    if (isRobotRunning) return res.json({ status: 'already_running' });
-    isRobotRunning = true;
+    isRobotActive = true;
+    console.log("[СЕРВЕР 1] Автоматический регистратор успешно ЗАПУЩЕН.");
     
-    function cycle() {
-        if (!isRobotRunning) return;
-        const name = `AutoUser_${robotUserIndex}`;
-        const targetId = findFirstEmptyCellId();
-        
-        if (!treeDatabase[targetId]) {
-            treeDatabase[targetId] = { id: targetId, user: null, parent: null };
-        }
-        treeDatabase[targetId].user = name;
-        robotUserIndex++;
-        
-        robotTimer = setTimeout(cycle, 2000); // Интервал в 2 секунды для стабильного обновления экрана
+    // Сразу делаем первый цикл
+    executeRobotCycle();
+    
+    // Каждые 3 секунды запускаем регистрацию нового случайного клиента
+    robotIntervalId = setInterval(executeRobotCycle, 3000);
+    
+    res.json({ success: true, message: "Робот запущен" });
+});
+
+// Остановить робота
+app.post('/api/robot/stop', (req, res) => {
+    if (!isRobotActive) {
+        return res.json({ success: false, message: "Робот уже остановлен" });
     }
-    cycle();
-    res.json({ status: 'started' });
+    
+    isRobotActive = false;
+    if (robotIntervalId) {
+        clearInterval(robotIntervalId);
+        robotIntervalId = null;
+    }
+    console.log("[СЕРВЕР 1] Автоматический регистратор ОСТАНОВЛЕН.");
+    res.json({ success: true, message: "Робот остановлен" });
 });
 
-// Остановка серверного робота-автомата
-app.get('/api/robot/stop', (req, res) => {
-    isRobotRunning = false;
-    if (robotTimer) clearTimeout(robotTimer);
-    res.json({ status: 'stopped' });
-});
-
-app.get('/', (req, res) => {
-    res.send('<h1>Бэкенд Сайта №1 успешно синхронизирован и запущен по пути backend/server.js!</h1>');
-});
-
-app.listen(port, () => {
-    console.log(`Сервер успешно работает на порту ${port}`);
-});
+app.listen(PORT, () => console.log(`Маркетплейс (Сайт 1) запущен на порту ${PORT}`));
