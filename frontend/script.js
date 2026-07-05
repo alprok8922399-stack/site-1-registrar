@@ -1,4 +1,4 @@
-const SERVER_1_URL = window.location.origin;
+const SERVER_1_URL = 'https://site-2-tree.onrender.com';
 
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
