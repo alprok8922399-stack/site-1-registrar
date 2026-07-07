@@ -1,6 +1,8 @@
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
-const BRIDGE_URL = 'http://localhost:4000'; // Запросы идут на мост Сайта 1
+
+// Относительный URL — берет хост, с которого открыта страница
+const BRIDGE_URL = ''; 
 
 function updateUI(isActive) {
     if (isActive) {
@@ -20,7 +22,10 @@ function checkStatus() {
     fetch(`${BRIDGE_URL}/api/robot/status`)
         .then(res => res.json())
         .then(data => updateUI(data.running))
-        .catch(() => statusLabel.textContent = "Ошибка соединения с мостом");
+        .catch((err) => {
+            console.error(err);
+            statusLabel.textContent = "Ошибка соединения с мостом";
+        });
 }
 
 checkStatus();
@@ -32,7 +37,7 @@ actionBtn.addEventListener('click', () => {
     fetch(`${BRIDGE_URL}${endpoint}`, { method: 'POST' })
         .then(res => res.json())
         .then(data => {
-            if (data.hasOwnProperty('running')) {
+            if (data && data.hasOwnProperty('running')) {
                 updateUI(data.running);
             } else {
                 checkStatus();
