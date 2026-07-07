@@ -1,15 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const path = require('path'); // Добавили встроенный модуль path
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
 
-// ВАЖНО: Раздаем статические файлы из папки frontend
-app.use(express.static(path.join(__dirname, '../frontend')));
+// Жесткая привязка к папке frontend на уровень выше от текущего файла backend
+const frontendPath = path.resolve(__dirname, '../frontend');
+app.use(express.static(frontendPath));
 
 let isRobotRunning = false;
 let robotInterval = null;
@@ -24,14 +25,12 @@ function startRobot() {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${botNumber}`;
 
-            // 1. Имитируем регистрацию бота в магазине
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
             
-            // 2. Имитируем моментальную оплату товара на 10 000 руб
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -59,9 +58,9 @@ function stopRobot() {
     console.log('[Робот] Остановлен.');
 }
 
-// По умолчанию отдаем панель управления роботом (index.html) при заходе на http://localhost:4000
+// Главная страница отдает index.html
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // API для панели управления роботом
@@ -79,4 +78,9 @@ app.post('/api/robot/stop', (req, res) => {
     res.json({ success: true, running: false });
 });
 
-app.listen(PORT, () => console.log(`Site 1 Bridge Server running on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`===================================================`);
+    console.log(`🚀 Сайт 1 запущен на http://localhost:${PORT}`);
+    console.log(`📂 Папка фронтенда: ${frontendPath}`);
+    console.log(`===================================================`);
+});
