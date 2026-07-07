@@ -13,13 +13,31 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
-// Твой реальный адрес Сайта 2 на Render:
+
+// Массив для хранения логов в оперативной памяти сервера
+let liveLogs = [];
+
+// Реальный адрес Сайта 2 на Render:
 const SITE2_URL = 'https://site-2-tree.onrender.com';
+
+// Функция добавления логов с ограничением длины массива (чтобы память не переполнялась)
+function logEvent(message) {
+    const timestamp = new Date().toISOString();
+    const formattedMessage = message; // Время добавит сам фронтенд
+    liveLogs.push(formattedMessage);
+    
+    // Держим в истории последние 100 строк
+    if (liveLogs.length > 100) {
+        liveLogs.shift();
+    }
+    console.log(`[Робот] ${message}`); // Оставляем и в консоли сервера
+}
 
 function startRobot() {
     if (robotInterval) return;
-    isRunning = true; // Для совместимости со старым кодом
     isRobotRunning = true;
+    
+    logEvent("Робот успешно запущен.");
     
     robotInterval = setInterval(async () => {
         try {
@@ -42,12 +60,12 @@ function startRobot() {
             
             const data = await res.json();
             if (data.success) {
-                console.log(`[Робот] Бот ${botName} встал в ячейку ${data.cellId}`);
+                logEvent(`Бот ${botName} встал в ячейку ${data.cellId}`);
             } else {
-                console.log(`[Робот] Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`Ошибка: ${data.error || 'Конец матрицы'}`);
             }
         } catch (err) {
-            console.error('[Робот] Ошибка сети:', err.message);
+            logEvent(`Ошибка сети: ${err.message}`);
         }
     }, 4000);
 }
@@ -58,12 +76,17 @@ function stopRobot() {
         robotInterval = null;
     }
     isRobotRunning = false;
-    console.log('[Робот] Остановлен.');
+    logEvent('Робот остановлен.');
 }
 
 // Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// API для отправки свежих логов на фронтенд
+app.get('/api/robot/logs', (req, res) => {
+    res.json({ logs: liveLogs });
 });
 
 // API для панели управления роботом
