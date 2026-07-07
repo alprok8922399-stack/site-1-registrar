@@ -1,11 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const path = require('path'); // Добавили встроенный модуль path
 const app = express();
-const PORT = process.env.PORT || 4000; // Сайт №1 крутится на 4000 порту
+const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json());
+
+// ВАЖНО: Раздаем статические файлы из папки frontend
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
@@ -21,14 +25,14 @@ function startRobot() {
             const botName = `AutoBot_${botNumber}`;
 
             // 1. Имитируем регистрацию бота в магазине
-            let res = await fetch(`${SITE2_URL}/api/shop/register`, {
+            await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
             
             // 2. Имитируем моментальную оплату товара на 10 000 руб
-            res = await fetch(`${SITE2_URL}/api/shop/pay`, {
+            const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName, amount: 10000 })
@@ -43,7 +47,7 @@ function startRobot() {
         } catch (err) {
             console.error('[Робот] Ошибка генерации трафика:', err.message);
         }
-    }, 4000); // Генерируем покупку каждые 4 секунды
+    }, 4000);
 }
 
 function stopRobot() {
@@ -54,6 +58,11 @@ function stopRobot() {
     isRobotRunning = false;
     console.log('[Робот] Остановлен.');
 }
+
+// По умолчанию отдаем панель управления роботом (index.html) при заходе на http://localhost:4000
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
 
 // API для панели управления роботом
 app.get('/api/robot/status', (req, res) => {
