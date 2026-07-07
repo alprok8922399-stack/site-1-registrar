@@ -13,7 +13,8 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
-const SITE2_URL = 'http://localhost:5000';
+// Твой реальный адрес Сайта 2 на Render:
+const SITE2_URL = 'https://site-2-tree.onrender.com';
 
 function startRobot() {
     if (robotInterval) return;
