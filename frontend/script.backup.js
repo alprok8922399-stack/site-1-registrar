@@ -1,6 +1,6 @@
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
-const API_URL = 'http://localhost:5000'; // Адрес, где запущен сервер Сайта 2
+const API_URL = ''; // Сделали пустым, чтобы запросы шли на тот же адрес/порт, откуда открыт сайт
 
 // Функция для обновления интерфейса
 function updateUI(isActive) {
