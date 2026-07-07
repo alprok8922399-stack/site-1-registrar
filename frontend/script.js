@@ -1,8 +1,7 @@
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
-const API_URL = 'http://localhost:5000'; // Адрес, где запущен сервер Сайта 2
+const BRIDGE_URL = 'http://localhost:4000'; // Запросы идут на мост Сайта 1
 
-// Функция для обновления интерфейса
 function updateUI(isActive) {
     if (isActive) {
         statusLabel.textContent = "Робот работает";
@@ -17,25 +16,27 @@ function updateUI(isActive) {
     }
 }
 
-// Проверка статуса при загрузке страницы
-fetch(`${API_URL}/api/robot/status`)
-    .then(res => res.json())
-    .then(data => updateUI(data.running))
-    .catch(() => statusLabel.textContent = "Ошибка соединения");
+function checkStatus() {
+    fetch(`${BRIDGE_URL}/api/robot/status`)
+        .then(res => res.json())
+        .then(data => updateUI(data.running))
+        .catch(() => statusLabel.textContent = "Ошибка соединения с мостом");
+}
 
-// Обработка нажатия на кнопку
+checkStatus();
+
 actionBtn.addEventListener('click', () => {
     const isRunning = statusLabel.classList.contains('active');
     const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
 
-    fetch(`${API_URL}${endpoint}`, { method: 'POST' })
+    fetch(`${BRIDGE_URL}${endpoint}`, { method: 'POST' })
         .then(res => res.json())
         .then(data => {
-            if (data.success) {
-                // Если запрос прошел, обновляем статус с сервера
-                fetch(`${API_URL}/api/robot/status`)
-                    .then(res => res.json())
-                    .then(data => updateUI(data.running));
+            if (data.hasOwnProperty('running')) {
+                updateUI(data.running);
+            } else {
+                checkStatus();
             }
-        });
+        })
+        .catch(() => alert('Не удалось изменить состояние робота'));
 });
