@@ -115,3 +115,11 @@ actionBtn.addEventListener('click', () => {
             appendToConsole("Не удалось изменить состояние робота", true);
         });
 });
+
+// Отслеживаем закрытие вкладки (крестик или закрытие браузера) через sendBeacon
+window.addEventListener('pagehide', () => {
+    // Если робот запущен, отправляем быструю фоновую команду на его остановку
+    if (statusLabel && statusLabel.classList.contains('active')) {
+        navigator.sendBeacon(`${API_URL}/api/robot/stop`);
+    }
+});
