@@ -13,24 +13,17 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
-
-// Массив для хранения логов в оперативной памяти сервера
 let liveLogs = [];
 
 // Реальный адрес Сайта 2 на Render:
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
-// Функция добавления логов с ограничением длины массива (чтобы память не переполнялась)
 function logEvent(message) {
-    const timestamp = new Date().toISOString();
-    const formattedMessage = message; // Время добавит сам фронтенд
-    liveLogs.push(formattedMessage);
-    
-    // Держим в истории последние 100 строк
+    liveLogs.push(message);
     if (liveLogs.length > 100) {
         liveLogs.shift();
     }
-    console.log(`[Робот] ${message}`); // Оставляем и в консоли сервера
+    console.log(`[Робот] ${message}`);
 }
 
 function startRobot() {
@@ -82,6 +75,11 @@ function stopRobot() {
 // Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// Заглушка для совместимости, если фронтенд пошлет старый запрос активности
+app.post('/api/robot/heartbeat', (req, res) => {
+    res.json({ success: true });
 });
 
 // API для отправки свежих логов на фронтенд
