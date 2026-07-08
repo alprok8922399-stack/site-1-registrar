@@ -13,31 +13,40 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
-
-// Массив для хранения логов в оперативной памяти сервера
 let liveLogs = [];
+
+// Переменные для отслеживания активности вкладки браузера
+let lastHeartbeat = Date.now();
+let watchDogInterval = null;
 
 // Реальный адрес Сайта 2 на Render:
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
-// Функция добавления логов с ограничением длины массива (чтобы память не переполнялась)
 function logEvent(message) {
-    const timestamp = new Date().toISOString();
-    const formattedMessage = message; // Время добавит сам фронтенд
-    liveLogs.push(formattedMessage);
-    
-    // Держим в истории последние 100 строк
+    liveLogs.push(message);
     if (liveLogs.length > 100) {
         liveLogs.shift();
     }
-    console.log(`[Робот] ${message}`); // Оставляем и в консоли сервера
+    console.log(`[Робот] ${message}`);
 }
 
 function startRobot() {
     if (robotInterval) return;
     isRobotRunning = true;
+    lastHeartbeat = Date.now(); // Сбрасываем таймер при старте
     
     logEvent("Робот успешно запущен.");
+    
+    // Включаем слежку за присутствием админа на сайте
+    if (!watchDogInterval) {
+        watchDogInterval = setInterval(() => {
+            // Если сигнала нет больше 6 секунд — вырубаем робота автоматически
+            if (isRobotRunning && (Date.now() - lastHeartbeat > 6000)) {
+                logEvent("Связь с вкладкой потеряна. Авто-остановка для защиты сервера...");
+                stopRobot();
+            }
+        }, 2000);
+    }
     
     robotInterval = setInterval(async () => {
         try {
@@ -75,6 +84,10 @@ function stopRobot() {
         clearInterval(robotInterval);
         robotInterval = null;
     }
+    if (watchDogInterval) {
+        clearInterval(watchDogInterval);
+        watchDogInterval = null;
+    }
     isRobotRunning = false;
     logEvent('Робот остановлен.');
 }
@@ -82,6 +95,12 @@ function stopRobot() {
 // Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// Новый API эндпоинт для приема сигнала присутствия (Heartbeat) от фронтенда
+app.post('/api/robot/heartbeat', (req, res) => {
+    lastHeartbeat = Date.now(); // Обновляем метку времени последней активности
+    res.json({ success: true });
 });
 
 // API для отправки свежих логов на фронтенд
