@@ -15,10 +15,6 @@ let isRobotRunning = false;
 let robotInterval = null;
 let liveLogs = [];
 
-// Переменные для отслеживания активности вкладки браузера
-let lastHeartbeat = Date.now();
-let watchDogInterval = null;
-
 // Реальный адрес Сайта 2 на Render:
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
@@ -33,20 +29,8 @@ function logEvent(message) {
 function startRobot() {
     if (robotInterval) return;
     isRobotRunning = true;
-    lastHeartbeat = Date.now(); // Сбрасываем таймер при старте
     
     logEvent("Робот успешно запущен.");
-    
-    // Включаем слежку за присутствием админа на сайте
-    if (!watchDogInterval) {
-        watchDogInterval = setInterval(() => {
-            // Если сигнала нет больше 6 секунд — вырубаем робота автоматически
-            if (isRobotRunning && (Date.now() - lastHeartbeat > 6000)) {
-                logEvent("Связь с вкладкой потеряна. Авто-остановка для защиты сервера...");
-                stopRobot();
-            }
-        }, 2000);
-    }
     
     robotInterval = setInterval(async () => {
         try {
@@ -84,10 +68,6 @@ function stopRobot() {
         clearInterval(robotInterval);
         robotInterval = null;
     }
-    if (watchDogInterval) {
-        clearInterval(watchDogInterval);
-        watchDogInterval = null;
-    }
     isRobotRunning = false;
     logEvent('Робот остановлен.');
 }
@@ -97,9 +77,8 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Новый API эндпоинт для приема сигнала присутствия (Heartbeat) от фронтенда
+// Заглушка для совместимости, если фронтенд пошлет старый запрос активности
 app.post('/api/robot/heartbeat', (req, res) => {
-    lastHeartbeat = Date.now(); // Обновляем метку времени последней активности
     res.json({ success: true });
 });
 
