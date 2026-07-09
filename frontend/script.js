@@ -123,3 +123,33 @@ window.addEventListener('pagehide', () => {
         navigator.sendBeacon(`${API_URL}/api/robot/stop`);
     }
 });
+
+// === ЛОГИКА ДЛЯ НОВОГО ВЫПАДАЮЩЕГО МЕНЮ И ТАБЛИЦЫ РЕФЕРАЛОВ ===
+
+const menuToggleBtn = document.getElementById('menuToggleBtn');
+const menuContent = document.getElementById('menuContent');
+const openRefTableBtn = document.getElementById('openRefTableBtn');
+const refTableOverlay = document.getElementById('refTableOverlay');
+const closeRefTableBtn = document.getElementById('closeRefTableBtn');
+
+// Открыть/закрыть Меню Управления
+if (menuToggleBtn && menuContent) {
+    menuToggleBtn.addEventListener('click', () => {
+        menuContent.classList.toggle('show');
+    });
+}
+
+// Открыть полноэкранную Таблицу рефералов
+if (openRefTableBtn && refTableOverlay && menuContent) {
+    openRefTableBtn.addEventListener('click', () => {
+        refTableOverlay.classList.add('show');
+        menuContent.classList.remove('show'); // Закрываем меню после клика
+    });
+}
+
+// Закрыть полноэкранную Таблицу рефералов
+if (closeRefTableBtn && refTableOverlay) {
+    closeRefTableBtn.addEventListener('click', () => {
+        refTableOverlay.classList.remove('show');
+    });
+}
