@@ -4,7 +4,6 @@ const consoleLog = document.getElementById('consoleLog');
 const API_URL = ''; // Запросы идут на тот же адрес/порт, откуда открыт сайт
 
 let logInterval = null;
-let lastLogTimestamp = 0; // Чтобы не дублировать старые логи
 
 // Функция для добавления строки в консоль на экране
 function appendToConsole(text, isError = false) {
@@ -34,7 +33,7 @@ async function fetchLiveLogs() {
     try {
         const res = await fetch(`${API_URL}/api/robot/logs`);
         if (!res.ok) return;
-        const data = await res.json(); // Ожидаем массив строк или объектов логов
+        const data = await res.json();
         
         if (data && Array.isArray(data.logs)) {
             // Если сервер очистил логи или база сброшена
@@ -72,8 +71,6 @@ function updateUI(isActive) {
         statusLabel.classList.remove('active');
         actionBtn.textContent = "ЗАПУСТИТЬ РОБОТА";
         actionBtn.className = "btn";
-        
-        // Не выключаем интервал сразу, чтобы дочитать последние логи остановы
     }
 }
 
@@ -116,9 +113,8 @@ actionBtn.addEventListener('click', () => {
         });
 });
 
-// Отслеживаем закрытие вкладки (крестик или закрытие браузера) через sendBeacon
+// Отслеживаем закрытие вкладки через sendBeacon
 window.addEventListener('pagehide', () => {
-    // Если робот запущен, отправляем быструю фоновую команду на его остановку
     if (statusLabel && statusLabel.classList.contains('active')) {
         navigator.sendBeacon(`${API_URL}/api/robot/stop`);
     }
