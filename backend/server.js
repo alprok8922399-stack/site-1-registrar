@@ -5,7 +5,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(cors());
+// Разрешаем CORS для любых запросов, чтобы не было ошибок сети на мобильном
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 // Настраиваем сервер так, чтобы он раздавал файлы из папки frontend
