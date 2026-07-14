@@ -121,7 +121,7 @@
                 
                 payBtn.style.display = 'none';
                 
-                showMsg(`Успешная оплата! Распределение средств:\n- В сейф Создателя: ${data.split.creatorShare} Митронов\n- В резерв выплат: ${data.split.payoutReserveShare} Mitrons\n- Сертификат успешно активирован и отправлен в работу по коэффициенту 2.2!`);
+                showMsg(`Успешная оплата! Ваш заказ принят в обработку.\n- В сейф Создателя направлено: ${data.split.creatorShare} Митронов\n- В резерв выплат направлено: ${data.split.payoutReserveShare} Mitrons\nСертификат на товар успешно активирован!`);
             }
         } catch (err) {
             showMsg('Ошибка сети при оплате', true);
