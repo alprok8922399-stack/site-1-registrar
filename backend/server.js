@@ -5,13 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Разрешаем CORS для любых запросов, чтобы не было ошибок сети на мобильном
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors());
 app.use(express.json());
 
 // Настраиваем сервер так, чтобы он раздавал файлы из папки frontend
@@ -43,34 +37,11 @@ function startRobot() {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${botNumber}`;
 
-            // Определяем спонсора для нового бота
-            let chosenSponsor = 'SYSTEM_ROOT';
-            try {
-                const treeRes = await fetch(`${SITE2_URL}/api/tree`);
-                if (treeRes.ok) {
-                    const treeData = await treeRes.json();
-                    // Собираем всех уникальных пользователей, которые уже есть в матрице
-                    let existingUsers = [];
-                    for (const cellId in treeData) {
-                        if (treeData[cellId] && treeData[cellId].user && treeData[cellId].user !== '-') {
-                            existingUsers.push(treeData[cellId].user);
-                        }
-                    }
-                    // Если пользователи есть, выбираем случайного из них
-                    if (existingUsers.length > 0) {
-                        const randomIndex = Math.floor(Math.random() * existingUsers.length);
-                        chosenSponsor = existingUsers[randomIndex];
-                    }
-                }
-            } catch (treeErr) {
-                logEvent(`Не удалось получить список спонсоров, ставим SYSTEM_ROOT`);
-            }
-
-            // 1. Регистрация бота в магазине с указанием выбранного спонсора
+            // 1. Регистрация бота в магазине
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, sponsor: chosenSponsor })
+                body: JSON.stringify({ username: botName })
             });
             
             // 2. Оплата товара ботом
@@ -82,7 +53,7 @@ function startRobot() {
             
             const data = await res.json();
             if (data.success) {
-                logEvent(`Бот ${botName} (Спонсор: ${chosenSponsor}) встал в ячейку ${data.cellId}`);
+                logEvent(`Бот ${botName} встал в ячейку ${data.cellId}`);
             } else {
                 logEvent(`Ошибка: ${data.error || 'Конец матрицы'}`);
             }
