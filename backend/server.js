@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
+const { calculatePurchaseFinance } = require('./finance');
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -23,7 +25,7 @@ function logEvent(message) {
     if (liveLogs.length > 100) {
         liveLogs.shift();
     }
-    console.log(`[Робот] ${message}`);
+    console.log(`[Сайт 1] ${message}`);
 }
 
 function startRobot() {
@@ -38,28 +40,32 @@ function startRobot() {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
 
-            // 1. Регистрация бота в магазине
+            // 1. Расчет финансовой модели (1000 Митронов)
+            const finData = calculatePurchaseFinance(botName, 'System');
+            logEvent(`💳 [Финансы] ${botName}: 450M -> Админ, 550M -> DAO, 450M -> Логистика (Таймер: ${finData.timerDays} дн.)`);
+
+            // 2. Регистрация бота в магазине
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
             
-            // 2. Оплата товара ботом (посадка в матрицу)
+            // 3. Посадка в матрицу (Сайт 2)
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 10000 })
+                body: JSON.stringify({ username: botName, amount: 1000 })
             });
             
             const data = await res.json();
             if (data.success) {
-                logEvent(`Бот ${botName} встал в ячейку ${data.cellId}`);
+                logEvent(`🟢 Бот ${botName} встал в ячейку ${data.cellId}`);
             } else {
-                logEvent(`Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`⚠️ Ошибка: ${data.error || 'Конец матрицы'}`);
             }
         } catch (err) {
-            logEvent(`Ошибка сети: ${err.message}`);
+            logEvent(`❌ Ошибка сети: ${err.message}`);
         }
     }, 4000);
 }
@@ -78,17 +84,55 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Заглушка для совместимости
+// Эндпоинты обработки ручной покупки с финансовым расчетом
+app.post('/api/shop/register', async (req, res) => {
+    try {
+        const response = await fetch(`${SITE2_URL}/api/shop/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(req.body)
+        });
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/shop/pay', async (req, res) => {
+    try {
+        const { username, sponsor } = req.body;
+        
+        // Проводим финансовый расчет
+        const finData = calculatePurchaseFinance(username, sponsor);
+        logEvent(`💰 [Покупка] ${username}: 450M -> Админ, 550M -> DAO (Спонсор: ${finData.distribution.daoMarketing.directSponsor.recipient})`);
+
+        // Передаем команду посадки в матрицу на Сайт 2
+        const response = await fetch(`${SITE2_URL}/api/shop/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, amount: 1000 })
+        });
+        
+        const data = await response.json();
+        res.status(response.status).json({
+            ...data,
+            finance: finData
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API управления логированием и роботом
 app.post('/api/robot/heartbeat', (req, res) => {
     res.json({ success: true });
 });
 
-// API для отправки свежих логов на фронтенд
 app.get('/api/robot/logs', (req, res) => {
     res.json({ logs: liveLogs });
 });
 
-// API для панели управления роботом
 app.get('/api/robot/status', (req, res) => {
     res.json({ running: isRobotRunning });
 });
