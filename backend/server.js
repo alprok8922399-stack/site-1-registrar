@@ -3,6 +3,7 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
 const { calculatePurchaseFinance } = require('./finance');
+const { getProductsCatalog } = require('./products');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -75,6 +76,16 @@ function stopRobot() {
 // Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// API Маркетплейса: Получение списка товаров с формулой 2.2 и подбором наилучшей цены
+app.get('/api/products', (req, res) => {
+    try {
+        const catalog = getProductsCatalog();
+        res.json({ success: true, products: catalog });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // Эндпоинты обработки ручной покупки с финансовым расчетом
