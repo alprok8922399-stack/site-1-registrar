@@ -44,25 +44,25 @@ function startRobot() {
             const finData = calculatePurchaseFinance(botName, 'System');
             logEvent(`💳 [Финансы] ${botName}: 450M -> Админ, 550M -> DAO, 450M -> Логистика (Таймер: ${finData.timerDays} дн.)`);
 
-            // 2. Регистрация бота в магазине
+            // 2. Регистрация бота на Сайте 2
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName })
+                body: JSON.stringify({ username: botName, sponsor: 'System' })
             });
             
             // 3. Посадка в матрицу (Сайт 2)
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 1000 })
+                body: JSON.stringify({ username: botName, amount: 10000 })
             });
             
             const data = await res.json();
-            if (data.success) {
-                logEvent(`🟢 Бот ${botName} встал в ячейку ${data.cellId}`);
+            if (res.ok && data.success) {
+                logEvent(`🟢 Бот ${botName} встал в ячейку ${data.cellId || 'OK'}`);
             } else {
-                logEvent(`⚠️ Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`⚠️ Ответ Сайта 2: ${data.error || 'Занято или завершено'}`);
             }
         } catch (err) {
             logEvent(`❌ Ошибка сети: ${err.message}`);
@@ -111,7 +111,7 @@ app.post('/api/shop/pay', async (req, res) => {
         const response = await fetch(`${SITE2_URL}/api/shop/pay`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, amount: 1000 })
+            body: JSON.stringify({ username, amount: 10000 })
         });
         
         const data = await response.json();
