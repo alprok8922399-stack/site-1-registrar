@@ -44,18 +44,11 @@ function startRobot() {
             const finData = calculatePurchaseFinance(botName, 'System');
             logEvent(`💳 [Финансы] ${botName}: 450M -> Админ, 550M -> DAO, 450M -> Логистика (Таймер: ${finData.timerDays} дн.)`);
 
-            // 2. Регистрация бота на Сайте 2
-            await fetch(`${SITE2_URL}/api/shop/register`, {
+            // 2. Регистрация и автоматическая посадка в матрицу на Сайте 2
+            const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName, sponsor: 'System' })
-            });
-            
-            // 3. Посадка в матрицу (Сайт 2)
-            const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 10000 })
             });
             
             const data = await res.json();
@@ -87,13 +80,22 @@ app.get('/', (req, res) => {
 // Эндпоинты обработки ручной покупки с финансовым расчетом
 app.post('/api/shop/register', async (req, res) => {
     try {
+        const { username, sponsor } = req.body;
+        
+        // Проводим финансовый расчет
+        const finData = calculatePurchaseFinance(username, sponsor);
+        logEvent(`💰 [Покупка] ${username}: 450M -> Админ, 550M -> DAO`);
+
         const response = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(req.body)
+            body: JSON.stringify({ username, sponsor })
         });
         const data = await response.json();
-        res.status(response.status).json(data);
+        res.status(response.status).json({
+            ...data,
+            finance: finData
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -105,9 +107,8 @@ app.post('/api/shop/pay', async (req, res) => {
         
         // Проводим финансовый расчет
         const finData = calculatePurchaseFinance(username, sponsor);
-        logEvent(`💰 [Покупка] ${username}: 450M -> Админ, 550M -> DAO (Спонсор: ${finData.distribution.daoMarketing.directSponsor.recipient})`);
+        logEvent(`💰 [Оплата] ${username}: 450M -> Админ, 550M -> DAO`);
 
-        // Передаем команду посадки в матрицу на Сайт 2
         const response = await fetch(`${SITE2_URL}/api/shop/pay`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
