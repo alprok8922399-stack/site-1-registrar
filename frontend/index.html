@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Панель Управления Роботом (Сайт №1)</title>
+    <title>Панель Управления & Маркетплейс (Сайт №1)</title>
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
@@ -12,30 +12,39 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
             margin: 0;
             padding: 20px;
             box-sizing: border-box;
         }
+        .main-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 900px;
+            width: 100%;
+        }
         .container {
             background: white;
-            padding: 30px;
+            padding: 25px;
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            max-width: 450px;
             width: 100%;
-            text-align: center;
+            box-sizing: border-box;
         }
         h1 {
             font-size: 22px;
             color: #2c3e50;
+            margin-top: 0;
             margin-bottom: 10px;
+            text-align: center;
         }
         .subtitle {
             font-size: 13px;
             color: #7f8c8d;
             margin-bottom: 20px;
+            text-align: center;
         }
         .status-box {
             background: #eef2f7;
@@ -46,6 +55,7 @@
             margin-bottom: 15px;
             color: #7f8c8d;
             border: 1px solid #dcdde1;
+            text-align: center;
         }
         .status-box.active {
             color: #27ae60;
@@ -104,26 +114,168 @@
             line-height: 1.4;
             word-break: break-all;
         }
-        .log-error {
-            color: #ff3333;
+
+        /* Сетка товаров маркетплейса */
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .product-card {
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 15px;
+            background: #fafbfc;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .product-card h3 {
+            font-size: 16px;
+            color: #2c3e50;
+            margin: 5px 0 10px 0;
+        }
+        .price-tag {
+            font-size: 20px;
+            font-weight: bold;
+            color: #27ae60;
+            margin: 8px 0;
+        }
+        .badge {
+            background: #f39c12;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            display: inline-block;
+        }
+        .btn-buy {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .btn-buy:hover {
+            background-color: #2980b9;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>🤖 Управление Генератором</h1>
-    <div class="subtitle">Имитация трафика маркетплейса на Сайт №2</div>
-    
-    <div class="status-box" id="statusLabel">Проверка статуса...</div>
-    <button class="btn" id="actionBtn">Загрузка...</button>
+<div class="main-wrapper">
 
-    <div class="console-title">📺 Живой поток событий:</div>
-    <div class="console-container" id="consoleLog">
-        <div class="log-line" style="color: #888;">Консоль готова. Ожидание запуска робота...</div>
+    <div class="container">
+        <h1>🛒 Маркетплейс MITRON</h1>
+        <div class="subtitle">Приоритет выбора акций/остатков | Коэффициент x2.2 в M (1000 M = 130 USDT)</div>
+        <div id="productsGrid" class="products-grid">
+            <div style="grid-column: 1/-1; text-align: center; color: #888;">Загрузка каталога товаров...</div>
+        </div>
     </div>
+
+    <div class="container">
+        <h1>🤖 Управление Генератором</h1>
+        <div class="subtitle">Имитация трафика маркетплейса на Сайт №2</div>
+        
+        <div class="status-box" id="statusLabel">Проверка статуса...</div>
+        <button class="btn" id="actionBtn" onclick="toggleRobot()">Загрузка...</button>
+
+        <div class="console-title">📺 Живой поток событий:</div>
+        <div class="console-container" id="consoleLog">
+            <div class="log-line" style="color: #888;">Консоль готова. Ожидание запуска робота...</div>
+        </div>
+    </div>
+
 </div>
 
-<script src="script.js"></script>
+<script>
+    let isRunning = false;
+
+    // 1. Загрузка каталога товаров
+    async function loadProducts() {
+        try {
+            const res = await fetch('/api/products');
+            const data = await res.json();
+            const grid = document.getElementById('productsGrid');
+            
+            if (data.success && data.products.length > 0) {
+                grid.innerHTML = data.products.map(p => `
+                    <div class="product-card">
+                        <div>
+                            <span class="badge">${p.category}</span>
+                            <h3>${p.title}</h3>
+                            <div class="price-tag">${p.priceMitrons} M</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #7f8c8d; margin-bottom: 8px;">${p.description}</div>
+                            <button class="btn-buy" onclick="buyProduct('${p.title}')">Купить</button>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                grid.innerHTML = '<div style="grid-column: 1/-1;">Товары не найдены.</div>';
+            }
+        } catch (err) {
+            console.error("Ошибка загрузки товаров:", err);
+        }
+    }
+
+    function buyProduct(title) {
+        alert(`Выбран товар: "${title}". В продакшене переходим к выбору валюты оплаты (USDT / Карта).`);
+    }
+
+    // 2. Обновление статуса генератора и консоли логов
+    async function updateStatus() {
+        try {
+            const statusRes = await fetch('/api/robot/status');
+            const statusData = await statusRes.json();
+            
+            isRunning = statusData.running;
+            const statusLabel = document.getElementById('statusLabel');
+            const actionBtn = document.getElementById('actionBtn');
+
+            if (isRunning) {
+                statusLabel.textContent = 'Генератор АКТИВЕН';
+                statusLabel.className = 'status-box active';
+                actionBtn.textContent = 'Остановить Генератор';
+                actionBtn.className = 'btn stop';
+            } else {
+                statusLabel.textContent = 'Генератор остановлен';
+                statusLabel.className = 'status-box';
+                actionBtn.textContent = 'Запустить Генератор';
+                actionBtn.className = 'btn';
+            }
+
+            const logsRes = await fetch('/api/robot/logs');
+            const logsData = await logsRes.json();
+            const consoleLog = document.getElementById('consoleLog');
+
+            if (logsData.logs && logsData.logs.length > 0) {
+                consoleLog.innerHTML = logsData.logs.map(log => `<div class="log-line">${log}</div>`).join('');
+                consoleLog.scrollTop = consoleLog.scrollHeight;
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    async function toggleRobot() {
+        const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
+        await fetch(endpoint, { method: 'POST' });
+        updateStatus();
+    }
+
+    // Автообновление раз в 2 секунды
+    setInterval(updateStatus, 2000);
+    
+    // Инициализация при загрузке
+    loadProducts();
+    updateStatus();
+</script>
 </body>
 </html>
