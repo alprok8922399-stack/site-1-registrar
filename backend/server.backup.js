@@ -34,8 +34,9 @@ function startRobot() {
     
     robotInterval = setInterval(async () => {
         try {
+            // Уникальный ID для бота на основе времени и случайного числа
             const botNumber = Math.floor(1000 + Math.random() * 9000);
-            const botName = `AutoBot_${botNumber}`;
+            const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
 
             // 1. Регистрация бота в магазине
             await fetch(`${SITE2_URL}/api/shop/register`, {
@@ -44,7 +45,7 @@ function startRobot() {
                 body: JSON.stringify({ username: botName })
             });
             
-            // 2. Оплата товара ботом
+            // 2. Оплата товара ботом (посадка в матрицу)
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -77,7 +78,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Заглушка для совместимости, если фронтенд пошлет старый запрос активности
+// Заглушка для совместимости
 app.post('/api/robot/heartbeat', (req, res) => {
     res.json({ success: true });
 });
