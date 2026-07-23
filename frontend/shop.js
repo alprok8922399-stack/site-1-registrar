@@ -1,4 +1,4 @@
-const API_URL = '/api';
+const API_URL = 'https://site-2-tree.onrender.com/api';
 const logBox = document.getElementById('logBox');
 const buyBtn = document.getElementById('buyBtn');
 const startRobotBtn = document.getElementById('startRobotBtn');
