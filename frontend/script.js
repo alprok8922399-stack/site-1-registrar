@@ -1,7 +1,7 @@
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
 const consoleLog = document.getElementById('consoleLog');
-const API_URL = ''; // Запросы идут на тот же адрес/порт, откуда открыт сайт
+const API_URL = 'https://site-2-tree.onrender.com'; // Подключили новый адрес Render
 
 let logInterval = null;
 let lastLogTimestamp = 0; // Чтобы не дублировать старые логи
@@ -29,7 +29,7 @@ function appendToConsole(text, isError = false) {
     consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
-// Функция для загрузки порции свежих логов с бэкенда Сайта №1
+// Функция для загрузки порции свежих логов с бэкенда
 async function fetchLiveLogs() {
     try {
         const res = await fetch(`${API_URL}/api/robot/logs`);
@@ -116,7 +116,7 @@ actionBtn.addEventListener('click', () => {
         });
 });
 
-// Отслеживаем закрытие вкладки (крестик или закрытие браузера) через sendBeacon
+// Отслеживаем закрытие вкладки через sendBeacon
 window.addEventListener('pagehide', () => {
     // Если робот запущен, отправляем быструю фоновую команду на его остановку
     if (statusLabel && statusLabel.classList.contains('active')) {
