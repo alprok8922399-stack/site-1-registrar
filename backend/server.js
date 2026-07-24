@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
+const { getProductsCatalog } = require('./products');
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -76,6 +78,16 @@ function stopRobot() {
 // Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+// API для получения каталога товаров с ценами x2.2 и пометками "*"
+app.get('/api/products', (req, res) => {
+    try {
+        const catalog = getProductsCatalog();
+        res.json({ success: true, products: catalog });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 // Заглушка для совместимости
