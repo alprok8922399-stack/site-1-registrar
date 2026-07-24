@@ -10,14 +10,14 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-// Настраиваем сервер так, чтобы он раздавал файлы из папки frontend
+// Раздача статики фронтенда
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
 let robotInterval = null;
 let liveLogs = [];
 
-// Реальный адрес Сайта 2 на Render:
+// Адрес Сайта 2 на Render:
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
 function logEvent(message) {
@@ -36,29 +36,35 @@ function startRobot() {
     
     robotInterval = setInterval(async () => {
         try {
-            // Абсолютно уникальный логин на основе точного timestamp и случайного UUID-подобного суффикса
-            const uniqueId = Date.now().toString() + '_' + Math.floor(100000 + Math.random() * 900000);
-            const botName = `AutoBot_${uniqueId}`;
+            // Гарантированно уникальное имя бота с использованием высокой точности времени и случайного ID
+            const uniqueSuffix = `${Date.now()}_${Math.floor(100000 + Math.random() * 900000)}`;
+            const botName = `AutoBot_${uniqueSuffix}`;
 
-            // 1. Регистрация бота в магазине
-            await fetch(`${SITE2_URL}/api/shop/register`, {
+            // 1. Регистрация уникального бота
+            const regRes = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
+
+            if (!regRes.ok) {
+                const regData = await regRes.json();
+                logEvent(`Ошибка регистрации: ${regData.error || 'Неизвестная ошибка'}`);
+                return;
+            }
             
-            // 2. Оплата товара ботом (посадка в матрицу)
-            const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
+            // 2. Оплата и посадкa бота в матрицу
+            const payRes = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 1000 })
+                body: JSON.stringify({ username: botName, amount: 10000 })
             });
             
-            const data = await res.json();
-            if (data.success) {
-                logEvent(`Бот ${botName} встал в ячейку ${data.cellId}`);
+            const payData = await payRes.json();
+            if (payData.success) {
+                logEvent(`✓ Бот ${botName} встал в ячейку ${payData.cellId}`);
             } else {
-                logEvent(`Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`Ошибка оплаты: ${payData.error || 'Не удалось занять место'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
@@ -75,12 +81,10 @@ function stopRobot() {
     logEvent('Робот остановлен.');
 }
 
-// Отдаем index.html при переходе на корень сайта
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// API для получения каталога товаров с ценами x2.2 и пометками "*"
 app.get('/api/products', (req, res) => {
     try {
         const catalog = getProductsCatalog();
@@ -90,17 +94,14 @@ app.get('/api/products', (req, res) => {
     }
 });
 
-// Заглушка для совместимости
 app.post('/api/robot/heartbeat', (req, res) => {
     res.json({ success: true });
 });
 
-// API для отправки свежих логов на фронтенд
 app.get('/api/robot/logs', (req, res) => {
     res.json({ logs: liveLogs });
 });
 
-// API для панели управления роботом
 app.get('/api/robot/status', (req, res) => {
     res.json({ running: isRobotRunning });
 });
