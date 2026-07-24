@@ -1,32 +1,41 @@
 /**
- * Модуль финансовых расчетов и сплита средств (Сайт 1)
- * Базовая сумма покупки: 1000 M (эквивалент 130 USDT)
+ * Модуль финансовой логики и DAO-распределения (Сайт 1)
+ * Обрабатывает покупку сертификата на 1000 Митронов:
+ * - 450 Митронов (45%) — Администрации
+ * - 550 Митронов (55%) — DAO Смарт-контракт (500 спонсору, по 100 в глубину)
+ * - 450 Митронов — Реальная логистика товара
  */
 
+/**
+ * Расчет распределения средств при покупке сертификата
+ */
 function calculatePurchaseFinance(username, sponsor) {
-    const TOTAL_AMOUNT = 1000; // 1000 M
+    const totalAmount = 1000; // 1000 Митронов общая стоимость сертификата
     
-    // 1. Покрытие себестоимости товара на внешнем маркетплейсе (45%)
-    const supplierCost = 450; 
+    const adminShare = 450;    // 45% в кошелек администрации
+    const logisticsShare = 450; // На оплату реального товара в маркетплейсе
     
-    // 2. Поступление в систему (55%) — 550 M
-    const matrixReserve = 250;       // Постановка и резерв в бинарной матрице (Сайт 2)
-    const referralReserve = 70;      // Заморозка на 31 день в Таблице (50M, 10M, 10M)
-    const adminProfit = 230;         // Чистый мгновенный доход администратора
+    // DAO распределение маркетинга (550 Митронов)
+    const directSponsorShare = 500; // Прямому спонсору
+    const depthFirstShare = 100;     // Спонсору выше (в глубину)
+    const depthSecondShare = 100;    // Спонсору еще выше (в глубину)
 
     return {
         success: true,
         username: username,
         sponsor: sponsor || 'System',
-        totalMitrons: TOTAL_AMOUNT,
+        totalMitrons: totalAmount,
         distribution: {
-            supplierCost: supplierCost,       // 450 M -> На сторонний маркетплейс
-            matrixReserve: matrixReserve,     // 250 M -> В ячейку матрицы (Сайт 2)
-            referralReserve: referralReserve, // 70 M  -> Резерв 31 день (50/10/10)
-            adminProfit: adminProfit          // 230 M -> Чистый доход
+            adminWalletMitrons: adminShare,
+            logisticsMitrons: logisticsShare,
+            daoMarketing: {
+                directSponsor: { recipient: sponsor || 'System', amount: directSponsorShare },
+                depthLevel1: { amount: depthFirstShare },
+                depthLevel2: { amount: depthSecondShare }
+            }
         },
         paymentDate: new Date().toISOString(),
-        timerDays: 31 // 31-дневный отказной период
+        timerDays: 31 // 31-дневный таймер выплат
     };
 }
 
