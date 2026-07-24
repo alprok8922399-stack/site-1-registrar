@@ -7,7 +7,7 @@
  * - Курс: 1 000 Mitron = 130 USD (1 Mitron = 0.13 USD).
  */
 
-const MITRON_PER_USD = 1000 / 130; // ~7.692 M за $1
+const MITRON_PER_USD = 1000 / 130; // ~7.69230769 M за $1
 const MIN_COEFFICIENT = 2.2;
 
 // База аналитики товаров с партнерского маркетплейса
@@ -44,11 +44,14 @@ const marketParseDatabase = [
 /**
  * Расчет цены по правилу "Пример с Утюгом"
  */
-function calculateProductPrice(parsedLowPrices, parsedHighPrices) {
-    const minPrice = parsedLowPrices.length > 0 ? Math.min(...parsedLowPrices) : 100;
-    const maxPrice = parsedHighPrices.length > 0 ? Math.max(...parsedHighPrices) : minPrice * MIN_COEFFICIENT;
+function calculateProductPrice(parsedLowPrices = [], parsedHighPrices = []) {
+    const validLow = parsedLowPrices.filter(p => typeof p === 'number' && p > 0);
+    const validHigh = parsedHighPrices.filter(p => typeof p === 'number' && p > 0);
 
-    const ratio = maxPrice / minPrice;
+    const minPrice = validLow.length > 0 ? Math.min(...validLow) : 100;
+    const maxPrice = validHigh.length > 0 ? Math.max(...validHigh) : minPrice * MIN_COEFFICIENT;
+
+    const ratio = minPrice > 0 ? maxPrice / minPrice : MIN_COEFFICIENT;
     let finalPriceUsd = 0;
     let hasAsterisk = false;
     let actualCoeff = ratio;
