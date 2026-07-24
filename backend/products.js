@@ -1,58 +1,106 @@
 /**
  * Модуль каталога товаров Маркетплейса (Сайт 1)
- * Базовая валюта себестоимости: USDT ($)
- * Курс: 1000 Mitron (M) = 130 USDT (1 M = 0.13 USDT)
- * Формула ценообразования: (Cost Price USDT / 0.13) * 2.2
+ * Точная логика ценообразования:
+ * - Картинка, название и описание берутся у ДЕШЕВОГО товара.
+ * - Если (Макс_Цена / Мин_Цена) >= 2.2, выставляется Макс_Цена с пометкой "*".
+ * - Если разница меньше 2.2, цена рассчитывается строго как (Мин_Цена * 2.2).
+ * - Курс: 1 000 Mitron = 130 USD (1 Mitron = 0.13 USD).
  */
 
-const COEFFICIENT = 2.2;
-const MITRON_PER_USDT = 1000 / 130; // ~7.692 M за 1 USDT (или 1M = 0.13$)
+const MITRON_PER_USD = 1000 / 130; // ~7.692 M за $1
+const MIN_COEFFICIENT = 2.2;
 
-// Базовый список товаров (себестоимость указана в USDT)
-const initialProducts = [
+// База аналитики товаров с партнерского маркетплейса
+const marketParseDatabase = [
     {
         id: 1,
         title: "Сертификат MITRON 1000",
         category: "Сертификаты",
-        costUsdt: 130, // 130$ себестоимость
-        image: "https://via.placeholder.com/300x200?text=Certificate+1000"
+        image: "https://via.placeholder.com/300x200?text=Certificate+1000",
+        description: "Официальный подарочный сертификат экосистемы MITRON",
+        parsedLowPrices: [130, 135],       // Дешевые позиции (по акции/остатки)
+        parsedHighPrices: [290, 300, 310]  // Дорогие аналоги на маркетплейсе
     },
     {
         id: 2,
-        title: "Смарт-часы MITRON Watch Pro",
-        category: "Электроника",
-        costUsdt: 65, // 65$ себестоимость
-        image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
+        title: "Утюг паровой MITRON Steam Pro",
+        category: "Бытовая техника",
+        image: "https://via.placeholder.com/300x200?text=Mitron+Iron",
+        description: "Утюг с мощным паровым ударом и керамической подошвой",
+        parsedLowPrices: [50],             // Пример: 50 единиц
+        parsedHighPrices: [135, 140]       // Пример: 135 единиц (135 / 50 = 2.7 >= 2.2)
     },
     {
         id: 3,
-        title: "Фирменное худи MITRON DAO",
-        category: "Одежда",
-        costUsdt: 32.5, // 32.5$ себестоимость
-        image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
+        title: "Смарт-часы MITRON Watch Pro",
+        category: "Электроника",
+        image: "https://via.placeholder.com/300x200?text=Mitron+Watch",
+        description: "Умные часы с мониторингом пульса и водозащитой",
+        parsedLowPrices: [65, 70],
+        parsedHighPrices: [120, 125]       // 125 / 65 = 1.92 (< 2.2 -> сработает x2.2)
     }
 ];
 
-// Расчет цены в Митронах с коэффициентом 2.2
-function calculateRetailPriceMitrons(costUsdt) {
-    const costInMitrons = costUsdt * MITRON_PER_USDT;
-    return Math.round(costInMitrons * COEFFICIENT);
+/**
+ * Расчет цены по правилу "Пример с Утюгом"
+ */
+function calculateProductPrice(parsedLowPrices, parsedHighPrices) {
+    const minPrice = parsedLowPrices.length > 0 ? Math.min(...parsedLowPrices) : 100;
+    const maxPrice = parsedHighPrices.length > 0 ? Math.max(...parsedHighPrices) : minPrice * MIN_COEFFICIENT;
+
+    const ratio = maxPrice / minPrice;
+    let finalPriceUsd = 0;
+    let hasAsterisk = false;
+    let actualCoeff = ratio;
+
+    // Если разница больше или равна 2.2 -> берем наивысшую цену и ставим "*"
+    if (ratio >= MIN_COEFFICIENT) {
+        finalPriceUsd = maxPrice;
+        hasAsterisk = true;
+    } else {
+        // Если меньше 2.2 -> строго Мин_Цена * 2.2
+        finalPriceUsd = minPrice * MIN_COEFFICIENT;
+        actualCoeff = MIN_COEFFICIENT;
+        hasAsterisk = false;
+    }
+
+    // Перевод в Митроны
+    const finalPriceMitrons = Math.round(finalPriceUsd * MITRON_PER_USD);
+
+    return {
+        baseMinUsd: minPrice,
+        finalPriceUsd: Math.round(finalPriceUsd * 100) / 100,
+        priceMitrons: finalPriceMitrons,
+        hasAsterisk: hasAsterisk,
+        coefficient: Math.round(actualCoeff * 100) / 100
+    };
 }
 
-// Получить каталог товаров
+/**
+ * Формирование каталога для витрины
+ */
 function getProductsCatalog() {
-    return initialProducts.map(product => {
-        const finalPriceMitrons = calculateRetailPriceMitrons(product.costUsdt);
+    return marketParseDatabase.map(product => {
+        const priceInfo = calculateProductPrice(product.parsedLowPrices, product.parsedHighPrices);
+        const asteriskLabel = priceInfo.hasAsterisk ? ' *' : '';
+
         return {
-            ...product,
-            priceMitrons: finalPriceMitrons,
-            coefficient: COEFFICIENT,
-            description: `Себестоимость: ${product.costUsdt} USDT | Коэффициент: x${COEFFICIENT} | Итого: ${finalPriceMitrons} M`
+            id: product.id,
+            title: `${product.title}${asteriskLabel}`,
+            category: product.category,
+            image: product.image, // Картинка дешевого товара
+            description: product.description, // Описание дешевого товара
+            baseMinUsd: priceInfo.baseMinUsd,
+            finalPriceUsd: priceInfo.finalPriceUsd,
+            priceMitrons: priceInfo.priceMitrons,
+            hasAsterisk: priceInfo.hasAsterisk,
+            coefficient: priceInfo.coefficient,
+            priceTag: `${priceInfo.priceMitrons} M${asteriskLabel} ($${priceInfo.finalPriceUsd})`
         };
     });
 }
 
 module.exports = {
     getProductsCatalog,
-    calculateRetailPriceMitrons
+    calculateProductPrice
 };
