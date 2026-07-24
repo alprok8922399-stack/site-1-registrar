@@ -36,9 +36,9 @@ function startRobot() {
     
     robotInterval = setInterval(async () => {
         try {
-            // Уникальный ID для бота на основе времени и случайного числа
-            const botNumber = Math.floor(1000 + Math.random() * 9000);
-            const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
+            // Абсолютно уникальный логин на основе точного timestamp и случайного UUID-подобного суффикса
+            const uniqueId = Date.now().toString() + '_' + Math.floor(100000 + Math.random() * 900000);
+            const botName = `AutoBot_${uniqueId}`;
 
             // 1. Регистрация бота в магазине
             await fetch(`${SITE2_URL}/api/shop/register`, {
@@ -51,7 +51,7 @@ function startRobot() {
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 10000 })
+                body: JSON.stringify({ username: botName, amount: 1000 })
             });
             
             const data = await res.json();
