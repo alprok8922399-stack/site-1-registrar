@@ -75,46 +75,37 @@ if (buyBtn) {
         const usernameInput = document.getElementById('buyerName');
         const sponsorInput = document.getElementById('buyerSponsor');
         
-        const username = usernameInput ? usernameInput.value.trim() : `User_${Date.now()}`;
-        const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
+        const userWallet = usernameInput ? usernameInput.value.trim() : `User_${Date.now()}`;
+        const sponsorId = sponsorInput ? sponsorInput.value.trim() : '';
 
-        if (!username) {
+        if (!userWallet) {
             alert('Введите логин покупателя!');
             return;
         }
 
         buyBtn.disabled = true;
         const mitronAmount = selectedProduct.priceMitrons || 1000;
-        log(`Запуск покупки "${selectedProduct.title}" (${mitronAmount} M) для: ${username}...`);
+        log(`Запуск покупки "${selectedProduct.title}" (${mitronAmount} M) для: ${userWallet}...`);
 
         try {
-            // Step 1: Регистрация клиента на Сайте 1
-            const regRes = await fetch(`${API_URL}/shop/register`, {
+            // Оплата, создание анонимного DAO пользователя и зачисление 100% в Кошелек Админа
+            const payRes = await fetch(`${API_URL}/shop/checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, sponsor })
-            });
-            const regData = await regRes.json();
-
-            if (!regRes.ok) {
-                throw new Error(regData.error || 'Ошибка регистрации');
-            }
-            log(`✓ Клиент ${username} зарегистрирован в базе магазина.`);
-
-            // Step 2: Оплата и распределение 100% средств в Кошелек Админа
-            const payRes = await fetch(`${API_URL}/shop/pay`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, amount: mitronAmount, sponsor })
+                body: JSON.stringify({ 
+                    userWallet: userWallet, 
+                    totalAmount: mitronAmount, 
+                    sponsorId: sponsorId 
+                })
             });
             const payData = await payRes.json();
 
-            if (!payRes.ok) {
-                throw new Error(payData.error || 'Ошибка оплаты');
+            if (!payRes.ok || !payData.success) {
+                throw new Error(payData.error || 'Ошибка покупки');
             }
 
             log(`💰 Оплата получена! 100% средств (${mitronAmount} M) переведено в Кошелек Администрации.`);
-            log(`🟢 На Сайте 2 активирована ячейка матрицы: ${payData.cellId}`);
+            log(`🟢 На Сайте 2 успешно активировано ячеек: ${payData.activatedCells} (DAO ID: ${payData.daoUsername})`);
 
         } catch (err) {
             log(`❌ Ошибка: ${err.message}`);
@@ -145,27 +136,15 @@ if (startRobotBtn) {
             log(`➡️ [${i}/${count}] Обработка ${botName}...`);
 
             try {
-                const regRes = await fetch(`${API_URL}/shop/register`, {
+                const payRes = await fetch(`${API_URL}/shop/checkout`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: botName })
-                });
-                const regData = await regRes.json();
-
-                if (!regRes.ok) {
-                    log(`  ⚠️ Пропуск ${botName}: ${regData.error}`);
-                    continue;
-                }
-
-                const payRes = await fetch(`${API_URL}/shop/pay`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: botName, amount: 1000 })
+                    body: JSON.stringify({ userWallet: botName, totalAmount: 1000 })
                 });
                 const payData = await payRes.json();
 
-                if (payRes.ok) {
-                    log(`  ✓ ${botName} оплатил 1000 M. Ячейка: ${payData.cellId}`);
+                if (payRes.ok && payData.success) {
+                    log(`  ✓ ${botName} оплатил 1000 M. На Сайте 2 активировано ячеек: ${payData.activatedCells}`);
                 } else {
                     log(`  ❌ Ошибка оплаты для ${botName}: ${payData.error || ''}`);
                 }
