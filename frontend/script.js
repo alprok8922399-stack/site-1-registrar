@@ -1,12 +1,20 @@
+/**
+ * Клиентский скрипт связи панели управления Сайта №1 (script.js)
+ * Связывает UI с REST API бэкенда (управление роботом, живые логи, баланс кошелька Админа)
+ */
+
 const statusLabel = document.getElementById('statusLabel');
 const actionBtn = document.getElementById('actionBtn');
 const consoleLog = document.getElementById('consoleLog');
+const adminBalanceDisplay = document.getElementById('adminBalanceDisplay');
+
 const API_URL = ''; // Запросы идут на тот же адрес/порт, откуда открыт сайт
 
 let logInterval = null;
-let lastLogTimestamp = 0; // Чтобы не дублировать старые логи
 
-// Функция для добавления строки в консоль на экране
+/**
+ * Функция добавления строки в интерактивную консоль
+ */
 function appendToConsole(text, isError = false) {
     if (!consoleLog) return;
     
@@ -29,20 +37,22 @@ function appendToConsole(text, isError = false) {
     consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
-// Функция для загрузки порции свежих логов с бэкенда Сайта №1
+/**
+ * Загрузка свежих логов и баланса Кошелька Администрации
+ */
 async function fetchLiveLogs() {
     try {
         const res = await fetch(`${API_URL}/api/robot/logs`);
         if (!res.ok) return;
-        const data = await res.json(); // Ожидаем массив строк или объектов логов
+        const data = await res.json();
         
         if (data && Array.isArray(data.logs)) {
-            // Если сервер очистил логи или база сброшена
+            // Если сервер очистил логи
             if (data.logs.length === 0 && consoleLog.children.length > 5) {
                 consoleLog.innerHTML = '<div class="log-line" style="color: #888;">Логи очищены сервером.</div>';
             }
             
-            // Выводим только те строки, которых у нас ещё нет на экране
+            // Выводим только новые строки
             const currentLinesCount = consoleLog.getElementsByClassName('log-line').length;
             if (data.logs.length > currentLinesCount) {
                 for (let i = currentLinesCount; i < data.logs.length; i++) {
@@ -50,75 +60,89 @@ async function fetchLiveLogs() {
                 }
             }
         }
+
+        // Обновляем баланс кошелька администрации (если передан)
+        if (data && typeof data.adminWalletBalance !== 'undefined' && adminBalanceDisplay) {
+            adminBalanceDisplay.textContent = `${data.adminWalletBalance} M`;
+        }
     } catch (err) {
         console.error("Ошибка обновления логов:", err);
     }
 }
 
-// Функция для обновления интерфейса кнопок
+/**
+ * Обновление статуса и визуальных состояний кнопок
+ */
 function updateUI(isActive) {
+    if (!statusLabel || !actionBtn) return;
+
     if (isActive) {
-        statusLabel.textContent = "Робот работает";
+        statusLabel.textContent = "🟢 Робот работает (эмуляция покупок)";
         statusLabel.classList.add('active');
-        actionBtn.textContent = "ОСТАНОВИТЬ РОБОТА";
+        actionBtn.textContent = "⏹️ ОСТАНОВИТЬ РОБОТА";
         actionBtn.className = "btn stop";
         
-        // Включаем чтение логов, если робот запущен
         if (!logInterval) {
-            logInterval = setInterval(fetchLiveLogs, 1500);
+            logInterval = setInterval(fetchLiveLogs, 1200);
         }
     } else {
-        statusLabel.textContent = "Робот остановлен";
+        statusLabel.textContent = "🔴 Робот остановлен";
         statusLabel.classList.remove('active');
-        actionBtn.textContent = "ЗАПУСТИТЬ РОБОТА";
+        actionBtn.textContent = "▶️ ЗАПУСТИТЬ РОБОТА";
         actionBtn.className = "btn";
-        
-        // Не выключаем интервал сразу, чтобы дочитать последние логи остановы
     }
 }
 
-// Проверка статуса при загрузке страницы
-fetch(`${API_URL}/api/robot/status`)
-    .then(res => res.json())
-    .then(data => {
-        updateUI(data.running);
-        // Запускаем постоянный опрос логов в любом случае, чтобы видеть историю
-        fetchLiveLogs();
-        setInterval(fetchLiveLogs, 1500);
-    })
-    .catch(() => {
-        statusLabel.textContent = "Ошибка соединения";
-        appendToConsole("Критическая ошибка: Нет связи с сервером генератора", true);
-    });
-
-// Обработка нажатия на кнопку управления роботом
-actionBtn.addEventListener('click', () => {
-    const isRunning = statusLabel.classList.contains('active');
-    const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
-
-    if (!isRunning) {
-        appendToConsole("Отправка команды на запуск робота...");
-    } else {
-        appendToConsole("Остановка робота, завершение циклов...");
-    }
-
-    fetch(`${API_URL}${endpoint}`, { method: 'POST' })
+/**
+ * Первичная инициализация при загрузке страницы
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    fetch(`${API_URL}/api/robot/status`)
         .then(res => res.json())
         .then(data => {
-            if (data.success) {
-                fetch(`${API_URL}/api/robot/status`)
-                    .then(res => res.json())
-                    .then(data => updateUI(data.running));
-            }
+            updateUI(data.running);
+            fetchLiveLogs();
+            setInterval(fetchLiveLogs, 1500);
         })
-        .catch(err => {
-            appendToConsole("Не удалось изменить состояние робота", true);
+        .catch(() => {
+            if (statusLabel) statusLabel.textContent = "⚠️ Ошибка соединения с сервером";
+            appendToConsole("Критическая ошибка: Нет связи с сервером Сайта №1", true);
         });
 });
 
-// Отслеживаем закрытие вкладки (крестик или закрытие браузера) через sendBeacon
+/**
+ * Обработка нажатия на кнопку управления роботом
+ */
+if (actionBtn) {
+    actionBtn.addEventListener('click', () => {
+        const isRunning = statusLabel.classList.contains('active');
+        const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
+
+        if (!isRunning) {
+            appendToConsole("Отправка команды на запуск эмулятора трафика...");
+        } else {
+            appendToConsole("Остановка робота, завершение текущих транзакций...");
+        }
+
+        fetch(`${API_URL}${endpoint}`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    fetch(`${API_URL}/api/robot/status`)
+                        .then(res => res.json())
+                        .then(data => updateUI(data.running));
+                }
+            })
+            .catch(err => {
+                appendToConsole("Не удалось изменить состояние робота", true);
+            });
+    });
+}
+
+/**
+ * Защита от зависания процессов при закрытии страницы
+ */
 window.addEventListener('pagehide', () => {
-    // Если робот запущен, отправляем быструю фоновую команду на его остановку
     if (statusLabel && statusLabel.classList.contains('active')) {
         navigator.sendBeacon(`${API_URL}/api/robot/stop`);
     }
