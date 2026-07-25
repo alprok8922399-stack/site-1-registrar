@@ -8,13 +8,16 @@ const { getProductsCatalog } = require('./products');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Секретный ключ для межсерверного взаимодействия с Сайтом №2
+const INTERNAL_SECRET_KEY = process.env.INTERNAL_SECRET_KEY || 'super_secret_mitron_key_2026';
+
 app.use(cors());
 app.use(express.json());
 
 // Раздача статики публичного фронтенда (Сайт 1)
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// Глобальное состояние системы Сайта 1 (В реальном продакшене — БД PostgreSQL/MongoDB)
+// Глобальное состояние системы Сайта 1
 let isRobotRunning = false;
 let robotInterval = null;
 let liveLogs = [];
@@ -57,7 +60,6 @@ function generateDaoUserHash() {
 app.get('/api/products', (req, res) => {
     try {
         const catalog = getProductsCatalog();
-        // В каталоге продукты уже приведены к правилу Ceiling / Min >= 2.2
         res.json({ success: true, products: catalog });
     } catch (err) {
         logEvent(`Ошибка получения каталога: ${err.message}`);
@@ -66,14 +68,11 @@ app.get('/api/products', (req, res) => {
 });
 
 /* ==========================================================================
-   2. ПРАВИЛО КОРЗИНЫИ ПРОВЕРКА ДОПУСКА (-10 M)
+   2. ПРАВИЛО КОРЗИНЫ И ПРОВЕРКА ДОПУСКА (-10 M)
    ========================================================================== */
 
-/**
- * Валидация корзины перед оплатой
- */
 app.post('/api/cart/validate', (req, res) => {
-    const { totalAmount } = req.body; // Сумма корзины в Митронах
+    const { totalAmount } = req.body;
 
     if (!totalAmount || totalAmount <= 0) {
         return res.status(400).json({ success: false, error: 'Корзина пуста' });
@@ -86,8 +85,6 @@ app.post('/api/cart/validate', (req, res) => {
         });
     }
 
-    // Расчет попадания в диапазоны с допуском -10 M
-    // Допустимые диапазоны: [990-1000], [1990-2000], [2990-3000], [3990-4000], [4990-5000]
     let targetCells = 0;
     let requiredAdd = 0;
 
@@ -129,12 +126,10 @@ app.post('/api/shop/checkout', async (req, res) => {
     try {
         const { userWallet, totalAmount, cartItems, sponsorId } = req.body;
 
-        // Проверка на блокировку
         if (userWallet && blockedUsers.has(userWallet)) {
             return res.status(403).json({ success: false, error: 'Ваш аккаунт заблокирован Администратором.' });
         }
 
-        // Проверка суммы
         let cellsCount = 0;
         for (let k = 1; k <= 5; k++) {
             if (totalAmount >= (k * 1000 - 10) && totalAmount <= (k * 1000)) {
@@ -150,7 +145,6 @@ app.post('/api/shop/checkout', async (req, res) => {
             });
         }
 
-        // DAO Onboarding: Регистрация логина если он новый
         let daoUser = registeredUsers.get(userWallet);
         if (!daoUser) {
             daoUser = {
@@ -162,14 +156,16 @@ app.post('/api/shop/checkout', async (req, res) => {
             if (userWallet) registeredUsers.set(userWallet, daoUser);
         }
 
-        // 1. ЖЕЛЕЗНОЕ ПРАВИЛО: Все 100% средств попадают в Кошелек Администрации
         adminWalletBalance += totalAmount;
         logEvent(`[Финансы] Поступление ${totalAmount} M в Кошелек Администрации от ${daoUser.username}. Баланс Админа: ${adminWalletBalance} M`);
 
-        // 2. Вызов Моста на Сайт 2 (Посадка ячеек в Матрицу и Таблицу)
+        // Вызов Моста на Сайт 2 с секретным ключом авторизации
         const site2Response = await fetch(`${SITE2_URL}/api/shop/pay`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET_KEY
+            },
             body: JSON.stringify({
                 username: daoUser.username,
                 amount: totalAmount,
@@ -215,20 +211,18 @@ app.post('/api/user/refund', async (req, res) => {
 
         logEvent(`[Отказ] Инициирован возврат средств и полный выход из системы для пользователя: ${targetUser}`);
 
-        // 1. Уведомление Сайта 2: Место в Матрице и Таблице переходит к Администрации (Admin_System)
-        const site2Refund = await fetch(`${SITE2_URL}/api/user/refund-transfer-to-admin`, {
+        const site2Refund = await fetch(`${SITE2_URL}/api/admin/delete-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET_KEY
+            },
             body: JSON.stringify({ username: targetUser })
         });
 
         const refundData = await site2Refund.json();
 
-        // 2. Возврат средств Покупателю в полном объеме из Кошелька Администрации
-        // (В эмуляторе списываем эквивалент покупки из баланса Админа)
         adminWalletBalance = Math.max(0, adminWalletBalance - 1000); 
-
-        // 3. Тотальное удаление логина с Сайта 1
         registeredUsers.delete(targetUser);
 
         logEvent(`[Отказ Завершен] Средства возвращены ${targetUser} в полном объеме. Аккаунт удален с Сайта 1. Ячейки на Сайте 2 переданы Admin_System.`);
@@ -256,17 +250,17 @@ app.post('/api/admin/block-user', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Укажите логин для блокировки.' });
         }
 
-        // Блокировка на Сайте 1
         blockedUsers.add(username);
 
-        // Передача сигнала блокировки на Сайт 2
-        await fetch(`${SITE2_URL}/api/admin/block-user`, {
+        await fetch(`${SITE2_URL}/api/admin/delete-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET_KEY
+            },
             body: JSON.stringify({ username, reason })
         });
 
-        // Полный возврат средств покупателю при блокировке
         adminWalletBalance = Math.max(0, adminWalletBalance - 1000);
 
         logEvent(`[Блокировка] Пользователь ${username} заблокирован Администратором. Блок синхронизирован с Сайтом 2. Средства возвращены.`);
@@ -286,9 +280,6 @@ app.post('/api/admin/block-user', async (req, res) => {
    6. КАСКАДНАЯ СИСТЕМА ВЫПЛАТ КЕШБЭКА (ПОСЛЕ 31 ДНЯ)
    ========================================================================== */
 
-/**
- * Запрос Робота на выплату после истечения 31-дневного отказного периода
- */
 app.post('/api/payouts/request', (req, res) => {
     const { leaderUsername, amount } = req.body;
     const payoutId = `PAY_${Date.now()}`;
@@ -306,10 +297,6 @@ app.post('/api/payouts/request', (req, res) => {
     res.json({ success: true, payoutId });
 });
 
-/**
- * Одобрение выплаты (Администратором или автоматически таймером)
- * Цепочка: Кошелек Админа -> Выплатной кошелек -> Буферный кошелек -> Лидер
- */
 app.post('/api/payouts/approve', (req, res) => {
     const { payoutId } = req.body;
     const payout = pendingPayouts.get(payoutId);
@@ -322,7 +309,6 @@ app.post('/api/payouts/approve', (req, res) => {
         return res.status(400).json({ success: false, error: 'Недостаточно средств в Кошельке Администрации' });
     }
 
-    // Каскадный перевод
     adminWalletBalance -= payout.amount;
     logEvent(`[Каскадный Перевод] 1. Списано ${payout.amount} M из Кошелька Администрации.`);
     logEvent(`[Каскадный Перевод] 2. Переведено на Выплатной кошелек.`);
@@ -353,12 +339,14 @@ function startRobot() {
             const uniqueSuffix = `${Date.now()}_${Math.floor(100000 + Math.random() * 900000)}`;
             const botDaoName = `DAO_AutoBot_${uniqueSuffix}`;
 
-            // Покупка стандартной ячейки 1000 M через ручки Сайта 1
             adminWalletBalance += 1000;
 
             const payRes = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-internal-key': INTERNAL_SECRET_KEY
+                },
                 body: JSON.stringify({ 
                     username: botDaoName, 
                     amount: 1000, 
