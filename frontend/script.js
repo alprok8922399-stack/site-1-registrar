@@ -1,6 +1,7 @@
 /**
  * Клиентский скрипт связи панели управления Сайта №1 (script.js)
- * Связывает UI с REST API бэкенда (управление роботом, живые логи, баланс кошелька Админа)
+ * Связывает UI с REST API бэкенда (управление роботом, живые логи, баланс кошелька Админа,
+ * а также обработку формы в «Кабинете Покупателя» для ручной и авто-регистрации).
  */
 
 const statusLabel = document.getElementById('statusLabel');
@@ -94,6 +95,74 @@ function updateUI(isActive) {
 }
 
 /**
+ * Инициализация обработки формы регистрации в «Кабинете Покупателя»
+ */
+function initBuyerRegistration() {
+    const regBtn = document.getElementById('buyerRegisterBtn');
+    const loginInput = document.getElementById('buyerLoginInput');
+    const sponsorInput = document.getElementById('buyerSponsorInput');
+    const msgBox = document.getElementById('buyerRegMessage');
+
+    if (!regBtn || !loginInput) return;
+
+    regBtn.addEventListener('click', async () => {
+        const username = loginInput.value.trim();
+        const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
+
+        if (!username) {
+            if (msgBox) {
+                msgBox.style.color = '#ff4d4d';
+                msgBox.textContent = 'Введите логин для покупок!';
+            }
+            return;
+        }
+
+        regBtn.disabled = true;
+        if (msgBox) {
+            msgBox.style.color = '#4da6ff';
+            msgBox.textContent = 'Регистрация и покупка сертификата на 1000 M...';
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/api/register-buyer`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    username: username, 
+                    sponsor: sponsor,
+                    certificatePurchased: true,
+                    amount: 1000
+                })
+            });
+
+            const data = await res.json();
+
+            if (res.ok && data.success) {
+                if (msgBox) {
+                    msgBox.style.color = '#2ed573';
+                    msgBox.textContent = `Успешно! Пользователь ${username} зарегистрирован, сертификат на 1000 M куплен, ячейка создана в Матрице и Таблице.`;
+                }
+                loginInput.value = '';
+                if (sponsorInput) sponsorInput.value = '';
+            } else {
+                if (msgBox) {
+                    msgBox.style.color = '#ff4d4d';
+                    msgBox.textContent = `Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`;
+                }
+            }
+        } catch (err) {
+            console.error('Ошибка сети при регистрации:', err);
+            if (msgBox) {
+                msgBox.style.color = '#ff4d4d';
+                msgBox.textContent = 'Ошибка сети при регистрации. Проверьте подключение к серверу.';
+            }
+        } finally {
+            regBtn.disabled = false;
+        }
+    });
+}
+
+/**
  * Первичная инициализация при загрузке страницы
  */
 document.addEventListener('DOMContentLoaded', () => {
@@ -108,6 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (statusLabel) statusLabel.textContent = "⚠️ Ошибка соединения с сервером";
             appendToConsole("Критическая ошибка: Нет связи с сервером Сайта №1", true);
         });
+
+    // Подключаем форму регистрации покупателя
+    initBuyerRegistration();
 });
 
 /**
