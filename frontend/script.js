@@ -1,7 +1,7 @@
 /**
  * Клиентский скрипт связи панели управления Сайта №1 (script.js)
  * Связывает UI с REST API бэкенда (управление роботом, живые логи, баланс кошелька Админа,
- * а также обработку формы в «Кабинете Покупателя» для ручной и авто-регистрации).
+ * а также обработку формы в «Кабинете Покупателя» и «Прямой посадке»).
  */
 
 const statusLabel = document.getElementById('statusLabel');
@@ -19,7 +19,6 @@ let logInterval = null;
 function appendToConsole(text, isError = false) {
     if (!consoleLog) return;
     
-    // Удаляем стартовую заглушку, если она есть
     if (consoleLog.innerHTML.includes("Ожидание запуска робота")) {
         consoleLog.innerHTML = "";
     }
@@ -27,14 +26,12 @@ function appendToConsole(text, isError = false) {
     const line = document.createElement('div');
     line.className = isError ? 'log-line log-error' : 'log-line';
     
-    // Форматируем время
     const now = new Date();
     const timeStr = now.toISOString().split('T')[1].slice(0, 8);
     
     line.textContent = `[${timeStr}] ${text}`;
     consoleLog.appendChild(line);
 
-    // Автоматический скролл консоли вниз к последнему событию
     consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
@@ -48,12 +45,10 @@ async function fetchLiveLogs() {
         const data = await res.json();
         
         if (data && Array.isArray(data.logs)) {
-            // Если сервер очистил логи
             if (data.logs.length === 0 && consoleLog.children.length > 5) {
                 consoleLog.innerHTML = '<div class="log-line" style="color: #888;">Логи очищены сервером.</div>';
             }
             
-            // Выводим только новые строки
             const currentLinesCount = consoleLog.getElementsByClassName('log-line').length;
             if (data.logs.length > currentLinesCount) {
                 for (let i = currentLinesCount; i < data.logs.length; i++) {
@@ -62,7 +57,6 @@ async function fetchLiveLogs() {
             }
         }
 
-        // Обновляем баланс кошелька администрации (если передан)
         if (data && typeof data.adminWalletBalance !== 'undefined' && adminBalanceDisplay) {
             adminBalanceDisplay.textContent = `${data.adminWalletBalance} M`;
         }
@@ -95,71 +89,102 @@ function updateUI(isActive) {
 }
 
 /**
- * Инициализация обработки формы регистрации в «Кабинете Покупателя»
+ * 1. Кабинет Покупателя Маркетплейса (Ручная регистрация покупателя + покупка 1000M)
  */
-function initBuyerRegistration() {
-    const regBtn = document.getElementById('buyerRegisterBtn');
-    const loginInput = document.getElementById('buyerLoginInput');
-    const sponsorInput = document.getElementById('buyerSponsorInput');
-    const msgBox = document.getElementById('buyerRegMessage');
+async function registerShopUser() {
+    const loginInput = document.getElementById('shop-username');
+    const sponsorInput = document.getElementById('shop-sponsor');
 
-    if (!regBtn || !loginInput) return;
+    if (!loginInput) return;
 
-    regBtn.addEventListener('click', async () => {
-        const username = loginInput.value.trim();
-        const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
+    const username = loginInput.value.trim();
+    const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
 
-        if (!username) {
-            if (msgBox) {
-                msgBox.style.color = '#ff4d4d';
-                msgBox.textContent = 'Введите логин для покупок!';
-            }
-            return;
+    if (!username) {
+        alert('Введите логин для покупок!');
+        return;
+    }
+
+    appendToConsole(`Регистрация покупателя ${username} и покупка сертификата на 1000 M...`);
+
+    try {
+        const res = await fetch(`${API_URL}/api/register-buyer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                username: username, 
+                sponsor: sponsor,
+                certificatePurchased: true,
+                amount: 1000
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            alert(`Успешно! Пользователь ${username} зарегистрирован, сертификат на 1000 M куплен, ячейка создана в Матрице и Таблице.`);
+            appendToConsole(`✅ Успех: Пользователь ${username} зарегистрирован и активирован.`);
+            loginInput.value = '';
+            if (sponsorInput) sponsorInput.value = '';
+        } else {
+            alert(`Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`);
+            appendToConsole(`❌ Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`, true);
         }
+    } catch (err) {
+        console.error('Ошибка сети при регистрации:', err);
+        alert('Ошибка сети при регистрации. Проверьте подключение к серверу.');
+        appendToConsole('❌ Ошибка сети при попытке регистрации', true);
+    }
+}
 
-        regBtn.disabled = true;
-        if (msgBox) {
-            msgBox.style.color = '#4da6ff';
-            msgBox.textContent = 'Регистрация и покупка сертификата на 1000 M...';
+/**
+ * 2. Прямая посадка в матрицу (Админ-панель)
+ */
+async function registerInMatrix() {
+    const loginInput = document.getElementById('matrix-username');
+    const sponsorInput = document.getElementById('matrix-sponsor');
+
+    if (!loginInput) return;
+
+    const username = loginInput.value.trim();
+    const sponsor = sponsorInput ? sponsorInput.value.trim() : 'SYSTEM_ROOT';
+
+    if (!username) {
+        alert('Введите логин для матрицы!');
+        return;
+    }
+
+    appendToConsole(`Прямая посадка в матрицу: ${username} (Спонсор: ${sponsor})...`);
+
+    try {
+        const res = await fetch(`${API_URL}/api/register-buyer`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                username: username, 
+                sponsor: sponsor,
+                certificatePurchased: true,
+                amount: 1000,
+                directMatrixPlacement: true
+            })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            alert(`Успешно! Логин ${username} размещен в Матрице и Таблице (Спонсор: ${sponsor}).`);
+            appendToConsole(`✅ Успех: ${username} успешно зашел в матрицу.`);
+            loginInput.value = '';
+            if (sponsorInput) sponsorInput.value = '';
+        } else {
+            alert(`Ошибка: ${data.message || 'Не удалось посадить в матрицу'}`);
+            appendToConsole(`❌ Ошибка посадки: ${data.message}`, true);
         }
-
-        try {
-            const res = await fetch(`${API_URL}/api/register-buyer`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    username: username, 
-                    sponsor: sponsor,
-                    certificatePurchased: true,
-                    amount: 1000
-                })
-            });
-
-            const data = await res.json();
-
-            if (res.ok && data.success) {
-                if (msgBox) {
-                    msgBox.style.color = '#2ed573';
-                    msgBox.textContent = `Успешно! Пользователь ${username} зарегистрирован, сертификат на 1000 M куплен, ячейка создана в Матрице и Таблице.`;
-                }
-                loginInput.value = '';
-                if (sponsorInput) sponsorInput.value = '';
-            } else {
-                if (msgBox) {
-                    msgBox.style.color = '#ff4d4d';
-                    msgBox.textContent = `Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`;
-                }
-            }
-        } catch (err) {
-            console.error('Ошибка сети при регистрации:', err);
-            if (msgBox) {
-                msgBox.style.color = '#ff4d4d';
-                msgBox.textContent = 'Ошибка сети при регистрации. Проверьте подключение к серверу.';
-            }
-        } finally {
-            regBtn.disabled = false;
-        }
-    });
+    } catch (err) {
+        console.error('Ошибка сети при прямой посадке:', err);
+        alert('Ошибка сети при прямой посадке.');
+        appendToConsole('❌ Ошибка сети при прямой посадке', true);
+    }
 }
 
 /**
@@ -177,9 +202,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (statusLabel) statusLabel.textContent = "⚠️ Ошибка соединения с сервером";
             appendToConsole("Критическая ошибка: Нет связи с сервером Сайта №1", true);
         });
-
-    // Подключаем форму регистрации покупателя
-    initBuyerRegistration();
 });
 
 /**
