@@ -108,13 +108,12 @@ async function registerShopUser() {
     appendToConsole(`Регистрация покупателя ${username} и покупка сертификата на 1000 M...`);
 
     try {
-        const res = await fetch(`${API_URL}/api/register-buyer`, {
+        const res = await fetch(`${API_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 username: username, 
                 sponsor: sponsor,
-                certificatePurchased: true,
                 amount: 1000
             })
         });
@@ -122,13 +121,13 @@ async function registerShopUser() {
         const data = await res.json();
 
         if (res.ok && data.success) {
-            alert(`Успешно! Пользователь ${username} зарегистрирован, сертификат на 1000 M куплен, ячейка создана в Матрице и Таблице.`);
+            alert(`Успешно! Пользователь ${username} зарегистрирован, сертификат на 1000 M куплен, ячейка (${data.cellId || 'M-Cell'}) создана.`);
             appendToConsole(`✅ Успех: Пользователь ${username} зарегистрирован и активирован.`);
             loginInput.value = '';
             if (sponsorInput) sponsorInput.value = '';
         } else {
-            alert(`Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`);
-            appendToConsole(`❌ Ошибка: ${data.message || 'Не удалось зарегистрироваться'}`, true);
+            alert(`Ошибка: ${data.error || data.message || 'Не удалось зарегистрироваться'}`);
+            appendToConsole(`❌ Ошибка: ${data.error || data.message || 'Не удалось зарегистрироваться'}`, true);
         }
     } catch (err) {
         console.error('Ошибка сети при регистрации:', err);
@@ -157,28 +156,25 @@ async function registerInMatrix() {
     appendToConsole(`Прямая посадка в матрицу: ${username} (Спонсор: ${sponsor})...`);
 
     try {
-        const res = await fetch(`${API_URL}/api/register-buyer`, {
+        const res = await fetch(`${API_URL}/api/register-matrix`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 username: username, 
-                sponsor: sponsor,
-                certificatePurchased: true,
-                amount: 1000,
-                directMatrixPlacement: true
+                sponsor: sponsor
             })
         });
 
         const data = await res.json();
 
         if (res.ok && data.success) {
-            alert(`Успешно! Логин ${username} размещен в Матрице и Таблице (Спонсор: ${sponsor}).`);
-            appendToConsole(`✅ Успех: ${username} успешно зашел в матрицу.`);
+            alert(`Успешно! Логин ${username} размещен в Матрице (Ячейка: ${data.cellId}, Спонсор: ${data.sponsor}).`);
+            appendToConsole(`✅ Успех: ${username} успешно зашел в матрицу в ячейку ${data.cellId}.`);
             loginInput.value = '';
             if (sponsorInput) sponsorInput.value = '';
         } else {
-            alert(`Ошибка: ${data.message || 'Не удалось посадить в матрицу'}`);
-            appendToConsole(`❌ Ошибка посадки: ${data.message}`, true);
+            alert(`Ошибка: ${data.error || data.message || 'Не удалось посадить в матрицу'}`);
+            appendToConsole(`❌ Ошибка посадки: ${data.error || data.message}`, true);
         }
     } catch (err) {
         console.error('Ошибка сети при прямой посадке:', err);
