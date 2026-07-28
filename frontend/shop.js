@@ -1,164 +1,116 @@
-/**
- * Скрипт витрины и корзины покупок (Сайт 1)
- * Связывает покупки на Маркетплейсе с синхронизацией матричных ячеек на Сайте 2
- */
-
 const API_URL = '/api';
 const logBox = document.getElementById('logBox');
 const buyBtn = document.getElementById('buyBtn');
 const startRobotBtn = document.getElementById('startRobotBtn');
-const productsContainer = document.getElementById('productsContainer');
 
-// Переменная для хранения выбранного товара
-let selectedProduct = { id: 1, title: 'Сертификат MITRON 1000', priceMitrons: 1000 };
-
-/**
- * Логирование событий в консоль страницы
- */
+// Вспомогательная функция для вывода логов на экран телефона
 function log(message) {
     const time = new Date().toLocaleTimeString();
-    if (logBox) {
-        logBox.innerHTML += `[${time}] ${message}\n`;
-        logBox.scrollTop = logBox.scrollHeight;
-    }
-    console.log(`[Shop] ${message}`);
+    logBox.innerHTML += `[${time}] ${message}\n`;
+    logBox.scrollTop = logBox.scrollHeight;
 }
 
-/**
- * Загрузка каталога товаров с бэкенда
- */
-async function loadProducts() {
+// --- КНОПКА: ИМИТАЦИЯ РУЧНОЙ ПОКУПКИ ---
+buyBtn.addEventListener('click', async () => {
+    const username = document.getElementById('buyerName').value.trim();
+    const sponsor = document.getElementById('buyerSponsor').value.trim();
+
+    if (!username) {
+        alert('Введите логин покупателя!');
+        return;
+    }
+
+    buyBtn.disabled = true;
+    log(`Запуск покупки для: ${username}...`);
+
     try {
-        const res = await fetch(`${API_URL}/products`);
-        const data = await res.json();
+        // 1. Регистрируем покупателя в базе магазина
+        const regRes = await fetch(`${API_URL}/shop/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, sponsor })
+        });
+        const regData = await regRes.json();
 
-        if (data.success && productsContainer) {
-            productsContainer.innerHTML = '';
-            data.products.forEach(product => {
-                const card = document.createElement('div');
-                card.className = 'product-card';
-                card.innerHTML = `
-                    <img src="${product.image}" alt="${product.title}" style="max-width: 100%; height: auto; border-radius: 8px;">
-                    <h3>${product.title}</h3>
-                    <p style="font-size: 14px; color: #666;">${product.description}</p>
-                    <p style="font-weight: bold; font-size: 18px; color: #2e7d32;">
-                        ${product.priceMitrons} Mitron ${product.hasAsterisk ? '*' : ''} 
-                        <span style="font-size: 14px; color: #888;">($${product.finalPriceUsd})</span>
-                    </p>
-                    <button onclick="selectAndBuyProduct(${product.id}, '${product.title}', ${product.priceMitrons})" style="cursor:pointer; padding: 10px 15px; background: #27ae60; color: white; border: none; border-radius: 6px;">
-                        Купить за ${product.priceMitrons} M
-                    </button>
-                `;
-                productsContainer.appendChild(card);
-            });
-            log(`✓ Загружено товаров из каталога: ${data.products.length}`);
+        if (!regRes.ok) {
+            throw new Error(regData.error || 'Ошибка регистрации');
         }
+        log(`✓ Клиент ${username} зарегистрирован в магазине.`);
+
+        // 2. Имитируем оплату
+        const payRes = await fetch(`${API_URL}/shop/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, amount: 10000 })
+        });
+        const payData = await payRes.json();
+
+        if (!payRes.ok) {
+            throw new Error(payData.error || 'Ошибка оплаты');
+        }
+
+        log(`💰 Оплата 10 000 руб. получена!`);
+        log(`💸 Сплит: на Маркетплейс отправлено 7 000 руб., в твой кошелек — 3 000 руб.`);
+        log(`🟢 На Сайте 2 зарезервирована ячейка: ${payData.cellId}`);
+
     } catch (err) {
-        log(`⚠️ Ошибка загрузки каталога: ${err.message}`);
+        log(`❌ Ошибка: ${err.message}`);
+    } finally {
+        buyBtn.disabled = false;
     }
-}
+});
 
-/**
- * Выбор товара и передача в корзину
- */
-window.selectAndBuyProduct = function(productId, title, priceMitrons) {
-    selectedProduct = { id: productId, title, priceMitrons };
-    log(`🛒 Выбран товар: ${title} (${priceMitrons} Mitron)`);
-    if (buyBtn) buyBtn.click();
-};
+// --- КНОПКА: ЗАПУСК РОБОТА ---
+startRobotBtn.addEventListener('click', async () => {
+    const prefix = document.getElementById('botPrefix').value.trim() || 'Bot_';
+    const count = parseInt(document.getElementById('botCount').value, 10) || 5;
 
-/**
- * Обработчик кнопки ручной покупки
- */
-if (buyBtn) {
-    buyBtn.addEventListener('click', async () => {
-        const usernameInput = document.getElementById('buyerName');
-        const sponsorInput = document.getElementById('buyerSponsor');
-        
-        const userWallet = usernameInput ? usernameInput.value.trim() : `User_${Date.now()}`;
-        const sponsorId = sponsorInput ? sponsorInput.value.trim() : '';
+    startRobotBtn.disabled = true;
+    log(`🤖 Робот запущен. Генерируем цепочку из ${count} ботов...`);
 
-        if (!userWallet) {
-            alert('Введите логин покупателя!');
-            return;
-        }
+    for (let i = 1; i <= count; i++) {
+        // Генерируем случайное число для уникальности имени бота
+        const randId = Math.floor(1000 + Math.random() * 9000);
+        const botName = `${prefix}${randId}`;
 
-        buyBtn.disabled = true;
-        const mitronAmount = selectedProduct.priceMitrons || 1000;
-        log(`Запуск покупки "${selectedProduct.title}" (${mitronAmount} M) для: ${userWallet}...`);
+        log(`➡️ [${i}/${count}] Обработка ${botName}...`);
 
         try {
-            // Оплата, создание анонимного DAO пользователя и зачисление 100% в Кошелек Админа
-            const payRes = await fetch(`${API_URL}/shop/checkout`, {
+            // Регистрируем бота на сервере магазина
+            const regRes = await fetch(`${API_URL}/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    userWallet: userWallet, 
-                    totalAmount: mitronAmount, 
-                    sponsorId: sponsorId 
-                })
+                body: JSON.stringify({ username: botName })
+            });
+            const regData = await regRes.json();
+
+            if (!regRes.ok) {
+                log(`  ⚠️ Пропуск ${botName}: ${regData.error}`);
+                continue;
+            }
+
+            // Бот совершает покупку
+            const payRes = await fetch(`${API_URL}/shop/pay`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: botName, amount: 10000 })
             });
             const payData = await payRes.json();
 
-            if (!payRes.ok || !payData.success) {
-                throw new Error(payData.error || 'Ошибка покупки');
+            if (payRes.ok) {
+                log(`  ✓ ${botName} оплатил. Встал в ячейку: ${payData.cellId}`);
+            } else {
+                log(`  ❌ Ошибка оплаты для ${botName}`);
             }
 
-            log(`💰 Оплата получена! 100% средств (${mitronAmount} M) переведено в Кошелек Администрации.`);
-            log(`🟢 На Сайте 2 успешно активировано ячеек: ${payData.activatedCells} (DAO ID: ${payData.daoUsername})`);
+            // Небольшая пауза, чтобы не перегружать телефон и сервер
+            await new Promise(resolve => setTimeout(resolve, 800));
 
         } catch (err) {
-            log(`❌ Ошибка: ${err.message}`);
-        } finally {
-            buyBtn.disabled = false;
+            log(`  ❌ Системный сбой для ${botName}: ${err.message}`);
         }
-    });
-}
+    }
 
-/**
- * Генератор авто-трафика (Робот покупок)
- */
-if (startRobotBtn) {
-    startRobotBtn.addEventListener('click', async () => {
-        const prefixInput = document.getElementById('botPrefix');
-        const countInput = document.getElementById('botCount');
-
-        const prefix = prefixInput ? prefixInput.value.trim() : 'Bot_';
-        const count = countInput ? parseInt(countInput.value, 10) : 5;
-
-        startRobotBtn.disabled = true;
-        log(`🤖 Робот запущен. Генерируем цепочку из ${count} уникальных ботов...`);
-
-        for (let i = 1; i <= count; i++) {
-            const uniqueId = `${Date.now().toString().slice(-6)}_${Math.floor(1000 + Math.random() * 9000)}`;
-            const botName = `${prefix}${uniqueId}`;
-
-            log(`➡️ [${i}/${count}] Обработка ${botName}...`);
-
-            try {
-                const payRes = await fetch(`${API_URL}/shop/checkout`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userWallet: botName, totalAmount: 1000 })
-                });
-                const payData = await payRes.json();
-
-                if (payRes.ok && payData.success) {
-                    log(`  ✓ ${botName} оплатил 1000 M. На Сайте 2 активировано ячеек: ${payData.activatedCells}`);
-                } else {
-                    log(`  ❌ Ошибка оплаты для ${botName}: ${payData.error || ''}`);
-                }
-
-                await new Promise(resolve => setTimeout(resolve, 800));
-
-            } catch (err) {
-                log(`  ❌ Системный сбой для ${botName}: ${err.message}`);
-            }
-        }
-
-        log(`🤖 Работа робота завершена! Проверь обновленные домики на Сайте 2.`);
-        startRobotBtn.disabled = false;
-    });
-}
-
-document.addEventListener('DOMContentLoaded', loadProducts);
+    log(`🤖 Работа робота завершена! Проверь Сайт 2 — там всё пришло в движение.`);
+    startRobotBtn.disabled = false;
+});
