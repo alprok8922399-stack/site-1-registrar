@@ -40,14 +40,14 @@ async function registerBatch(requestedBatchSize) {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
 
-            // 1. Регистрация бота в магазине
+            // 1. Регистрация бота в системе
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
 
-            // 2. Оплата товара ботом (посадка в матрицу)
+            // 2. Оплата сертификата ботом (посадка в матрицу и проведение покупки для аналитики)
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,7 @@ async function registerBatch(requestedBatchSize) {
 
             const data = await res.json();
             if (data.success) {
-                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId}`);
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId || 'активирован'}`);
             } else {
                 logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец матрицы'}`);
             }
