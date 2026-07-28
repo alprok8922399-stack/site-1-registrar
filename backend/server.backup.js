@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
 let isRobotRunning = false;
-let robotInterval = null;
+let robotTimeout = null;
 let liveLogs = [];
 
 // Реальный адрес Сайта 2 на Render:
@@ -26,48 +26,65 @@ function logEvent(message) {
     console.log(`[Робот] ${message}`);
 }
 
-function startRobot() {
-    if (robotInterval) return;
-    isRobotRunning = true;
-    
-    logEvent("Робот успешно запущен.");
-    
-    robotInterval = setInterval(async () => {
+async function registerBatch(requestedBatchSize) {
+    if (!isRobotRunning) return;
+
+    // Генерируем размер пачки от 10 до 20, если не передан конкретный
+    const batchSize = requestedBatchSize || Math.floor(Math.random() * 11) + 10;
+    logEvent(`Старт порции: регистрируем ${batchSize} ботов...`);
+
+    for (let i = 0; i < batchSize; i++) {
+        if (!isRobotRunning) break;
+
         try {
-            // Уникальный ID для бота на основе времени и случайного числа
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
 
-            // 1. Регистрация бота в магазине
+            // 1. Регистрация бота в системе
             await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: botName })
             });
-            
-            // 2. Оплата товара ботом (посадка в матрицу)
+
+            // 2. Оплата сертификата ботом (посадка в матрицу и проведение покупки для аналитики)
             const res = await fetch(`${SITE2_URL}/api/shop/pay`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 10000 })
+                body: JSON.stringify({ username: botName, amount: 1000 })
             });
-            
+
             const data = await res.json();
             if (data.success) {
-                logEvent(`Бот ${botName} встал в ячейку ${data.cellId}`);
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId || 'активирован'}`);
             } else {
-                logEvent(`Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец матрицы'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
         }
-    }, 4000);
+
+        // Пауза 100мс между ботами в пачке для стабильности
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    if (isRobotRunning) {
+        // Пауза 3 секунды перед следующей порцией
+        robotTimeout = setTimeout(() => registerBatch(), 3000);
+    }
+}
+
+function startRobot(batchSize) {
+    if (isRobotRunning) return;
+    isRobotRunning = true;
+    logEvent("Робот успешно запущен (порционный режим).");
+    registerBatch(batchSize);
 }
 
 function stopRobot() {
-    if (robotInterval) {
-        clearInterval(robotInterval);
-        robotInterval = null;
+    if (robotTimeout) {
+        clearTimeout(robotTimeout);
+        robotTimeout = null;
     }
     isRobotRunning = false;
     logEvent('Робот остановлен.');
@@ -94,7 +111,8 @@ app.get('/api/robot/status', (req, res) => {
 });
 
 app.post('/api/robot/start', (req, res) => {
-    startRobot();
+    const { batchSize } = req.body || {};
+    startRobot(batchSize);
     res.json({ success: true, running: true });
 });
 
