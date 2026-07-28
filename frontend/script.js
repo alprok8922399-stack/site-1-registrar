@@ -4,7 +4,6 @@ const consoleLog = document.getElementById('consoleLog');
 const API_URL = ''; // Запросы идут на тот же адрес/порт, откуда открыт сайт
 
 let logInterval = null;
-let lastLogTimestamp = 0; // Чтобы не дублировать старые логи
 
 // Функция для добавления строки в консоль на экране
 function appendToConsole(text, isError = false) {
@@ -34,7 +33,7 @@ async function fetchLiveLogs() {
     try {
         const res = await fetch(`${API_URL}/api/robot/logs`);
         if (!res.ok) return;
-        const data = await res.json(); // Ожидаем массив строк или объектов логов
+        const data = await res.json();
         
         if (data && Array.isArray(data.logs)) {
             // Если сервер очистил логи или база сброшена
@@ -42,7 +41,7 @@ async function fetchLiveLogs() {
                 consoleLog.innerHTML = '<div class="log-line" style="color: #888;">Логи очищены сервером.</div>';
             }
             
-            // Выводим только те строки, которых у нас ещё нет на экране
+            // Выводим только новые строки
             const currentLinesCount = consoleLog.getElementsByClassName('log-line').length;
             if (data.logs.length > currentLinesCount) {
                 for (let i = currentLinesCount; i < data.logs.length; i++) {
@@ -63,17 +62,14 @@ function updateUI(isActive) {
         actionBtn.textContent = "ОСТАНОВИТЬ РОБОТА";
         actionBtn.className = "btn stop";
         
-        // Включаем чтение логов, если робот запущен
         if (!logInterval) {
-            logInterval = setInterval(fetchLiveLogs, 1500);
+            logInterval = setInterval(fetchLiveLogs, 1000);
         }
     } else {
         statusLabel.textContent = "Робот остановлен";
         statusLabel.classList.remove('active');
         actionBtn.textContent = "ЗАПУСТИТЬ РОБОТА";
         actionBtn.className = "btn";
-        
-        // Не выключаем интервал сразу, чтобы дочитать последние логи остановы
     }
 }
 
@@ -82,9 +78,10 @@ fetch(`${API_URL}/api/robot/status`)
     .then(res => res.json())
     .then(data => {
         updateUI(data.running);
-        // Запускаем постоянный опрос логов в любом случае, чтобы видеть историю
         fetchLiveLogs();
-        setInterval(fetchLiveLogs, 1500);
+        if (!logInterval) {
+            logInterval = setInterval(fetchLiveLogs, 1200);
+        }
     })
     .catch(() => {
         statusLabel.textContent = "Ошибка соединения";
@@ -97,12 +94,16 @@ actionBtn.addEventListener('click', () => {
     const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
 
     if (!isRunning) {
-        appendToConsole("Отправка команды на запуск робота...");
+        appendToConsole("Запуск робота: порционная регистрация (по 10-20 участников)...");
     } else {
-        appendToConsole("Остановка робота, завершение циклов...");
+        appendToConsole("Остановка робота, завершение активных пачек...");
     }
 
-    fetch(`${API_URL}${endpoint}`, { method: 'POST' })
+    fetch(`${API_URL}${endpoint}`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchSize: Math.floor(Math.random() * 11) + 10 }) // Пакет 10-20 человек
+    })
         .then(res => res.json())
         .then(data => {
             if (data.success) {
@@ -116,9 +117,8 @@ actionBtn.addEventListener('click', () => {
         });
 });
 
-// Отслеживаем закрытие вкладки (крестик или закрытие браузера) через sendBeacon
+// Отслеживаем закрытие вкладки через sendBeacon
 window.addEventListener('pagehide', () => {
-    // Если робот запущен, отправляем быструю фоновую команду на его остановку
     if (statusLabel && statusLabel.classList.contains('active')) {
         navigator.sendBeacon(`${API_URL}/api/robot/stop`);
     }
