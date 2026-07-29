@@ -3,114 +3,110 @@ const logBox = document.getElementById('logBox');
 const buyBtn = document.getElementById('buyBtn');
 const startRobotBtn = document.getElementById('startRobotBtn');
 
+let currentCartTotal = 1000; // По умолчанию берем 1000 M для первой тестовой покупки
+let cartItems = [];
+
 // Вспомогательная функция для вывода логов на экран телефона
 function log(message) {
+    if (!logBox) return;
     const time = new Date().toLocaleTimeString();
     logBox.innerHTML += `[${time}] ${message}\n`;
     logBox.scrollTop = logBox.scrollHeight;
 }
 
-// --- КНОПКА: ИМИТАЦИЯ РУЧНОЙ ПОКУПКИ ---
-buyBtn.addEventListener('click', async () => {
-    const username = document.getElementById('buyerName').value.trim();
-    const sponsor = document.getElementById('buyerSponsor').value.trim();
-
-    if (!username) {
-        alert('Введите логин покупателя!');
-        return;
+// Валидация корзины по правилам диапазона (990-1000 M, 1990-2000 M и т.д. до 5000 M)
+function validateCartUI(totalMitrons) {
+    if (totalMitrons <= 0) {
+        return { valid: false, message: 'Корзина пуста', needed: 1000 };
+    }
+    if (totalMitrons > 5000) {
+        return { valid: false, message: 'Максимальный объем одной покупки — 5000 Митронов', needed: 0 };
     }
 
-    buyBtn.disabled = true;
-    log(`Запуск покупки для: ${username}...`);
+    const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
+    const minAllowed = targetBracket - 10; // 990, 1990, 2990 и т.д.
 
-    try {
-        // 1. Регистрируем покупателя в базе магазина
-        const regRes = await fetch(`${API_URL}/shop/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, sponsor })
-        });
-        const regData = await regRes.json();
-
-        if (!regRes.ok) {
-            throw new Error(regData.error || 'Ошибка регистрации');
-        }
-        log(`✓ Клиент ${username} зарегистрирован в магазине.`);
-
-        // 2. Имитируем оплату
-        const payRes = await fetch(`${API_URL}/shop/pay`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, amount: 10000 })
-        });
-        const payData = await payRes.json();
-
-        if (!payRes.ok) {
-            throw new Error(payData.error || 'Ошибка оплаты');
-        }
-
-        log(`💰 Оплата 10 000 руб. получена!`);
-        log(`💸 Сплит: на Маркетплейс отправлено 7 000 руб., в твой кошелек — 3 000 руб.`);
-        log(`🟢 На Сайте 2 зарезервирована ячейка: ${payData.cellId}`);
-
-    } catch (err) {
-        log(`❌ Ошибка: ${err.message}`);
-    } finally {
-        buyBtn.disabled = false;
+    if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
+        const cellsCount = targetBracket / 1000;
+        return { valid: true, cellsCount, targetBracket };
+    } else {
+        const needed = minAllowed - totalMitrons;
+        return { 
+            valid: false, 
+            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов (цель: ${minAllowed}-${targetBracket} M)`, 
+            needed: needed > 0 ? needed : 0 
+        };
     }
-});
+}
 
-// --- КНОПКА: ЗАПУСК РОБОТА ---
-startRobotBtn.addEventListener('click', async () => {
-    const prefix = document.getElementById('botPrefix').value.trim() || 'Bot_';
-    const count = parseInt(document.getElementById('botCount').value, 10) || 5;
+// Находим кнопку регистрации/покупки на странице
+const regBtn = document.querySelector('button') || buyBtn;
 
-    startRobotBtn.disabled = true;
-    log(`🤖 Робот запущен. Генерируем цепочку из ${count} ботов...`);
+if (regBtn) {
+    regBtn.addEventListener('click', async () => {
+        const usernameInput = document.getElementById('buyerName') || document.querySelector('input[type="text"]');
+        const sponsorInput = document.getElementById('buyerSponsor');
+        
+        const username = usernameInput ? usernameInput.value.trim() : '';
+        const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
 
-    for (let i = 1; i <= count; i++) {
-        // Генерируем случайное число для уникальности имени бота
-        const randId = Math.floor(1000 + Math.random() * 9000);
-        const botName = `${prefix}${randId}`;
+        if (!username) {
+            alert('Введите логин покупателя!');
+            return;
+        }
 
-        log(`➡️ [${i}/${count}] Обработка ${botName}...`);
+        const validation = validateCartUI(currentCartTotal);
+        if (!validation.valid) {
+            alert(validation.message);
+            return;
+        }
+
+        regBtn.disabled = true;
+        
+        // Создаем плашку сообщения об ошибке/успехе под кнопкой
+        let statusBox = document.querySelector('.status-box');
+        if (!statusBox) {
+            statusBox = document.createElement('div');
+            statusBox.className = 'status-box';
+            statusBox.style.marginTop = '15px';
+            statusBox.style.padding = '12px';
+            statusBox.style.borderRadius = '8px';
+            statusBox.style.textAlign = 'center';
+            statusBox.style.fontWeight = 'bold';
+            regBtn.parentNode.appendChild(statusBox);
+        }
+
+        statusBox.style.backgroundColor = '#e8f8f5';
+        statusBox.style.color = '#117a65';
+        statusBox.innerText = `Обработка покупки для ${username}...`;
 
         try {
-            // Регистрируем бота на сервере магазина
-            const regRes = await fetch(`${API_URL}/shop/register`, {
+            const checkoutRes = await fetch(`${API_URL}/shop/checkout`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName })
+                body: JSON.stringify({ 
+                    username, 
+                    totalMitrons: currentCartTotal,
+                    uplineUser: sponsor || null,
+                    cartItems: cartItems
+                })
             });
-            const regData = await regRes.json();
+            const checkoutData = await checkoutRes.json();
 
-            if (!regRes.ok) {
-                log(`  ⚠️ Пропуск ${botName}: ${regData.error}`);
-                continue;
+            if (!checkoutRes.ok || !checkoutData.success) {
+                throw new Error(checkoutData.error || 'Ошибка при проведении покупки');
             }
 
-            // Бот совершает покупку
-            const payRes = await fetch(`${API_URL}/shop/pay`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, amount: 10000 })
-            });
-            const payData = await payRes.json();
-
-            if (payRes.ok) {
-                log(`  ✓ ${botName} оплатил. Встал в ячейку: ${payData.cellId}`);
-            } else {
-                log(`  ❌ Ошибка оплаты для ${botName}`);
-            }
-
-            // Небольшая пауза, чтобы не перегружать телефон и сервер
-            await new Promise(resolve => setTimeout(resolve, 800));
+            statusBox.style.backgroundColor = '#d4efdf';
+            statusBox.style.color = '#196f3d';
+            statusBox.innerText = `✓ Покупка успешна! Место в матрице: ${checkoutData.cellId} (ячеек: ${checkoutData.cellsCount})`;
 
         } catch (err) {
-            log(`  ❌ Системный сбой для ${botName}: ${err.message}`);
+            statusBox.style.backgroundColor = '#fadbd8';
+            statusBox.style.color = '#78281f';
+            statusBox.innerText = `Ошибка: ${err.message}`;
+        } finally {
+            regBtn.disabled = false;
         }
-    }
-
-    log(`🤖 Работа робота завершена! Проверь Сайт 2 — там всё пришло в движение.`);
-    startRobotBtn.disabled = false;
-});
+    });
+}
