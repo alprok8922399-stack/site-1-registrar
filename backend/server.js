@@ -86,28 +86,26 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Совместимость со старым интерфейсом магазина (/api/shop/register)
+// Регистрация в магазине (ТОЛЬКО создаёт профиль, НЕ ставит в матрицу!)
 app.post('/api/shop/register', async (req, res) => {
-    const { username, sponsor } = req.body || {};
-    if (!username) return res.status(400).json({ error: 'Логин обязателен' });
-
-    try {
-        const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.trim(), uplineUser: sponsor || null, cellsCount: 1, amountMitrons: 1000 })
-        });
-        const site2Data = await site2Res.json();
-        return res.json({ success: true, ...site2Data });
-    } catch (err) {
-        return res.status(500).json({ error: `Ошибка связи с Сайтом 2: ${err.message}` });
+    const { username } = req.body || {};
+    if (!username || !username.trim()) {
+        return res.status(400).json({ error: 'Логин обязателен' });
     }
+
+    // Возвращаем успех для фронтенда, в матрицу НЕ ставим
+    return res.json({ 
+        success: true, 
+        message: 'Регистрация успешна. Ожидайте оплаты сертификата.' 
+    });
 });
 
-// Совместимость со старым интерфейсом магазина (/api/shop/pay)
+// Оплата "Сертификата на 1000 Митронов" (Только здесь происходит постановка в матрицу!)
 app.post('/api/shop/pay', async (req, res) => {
     const { username, amountMitrons } = req.body || {};
-    if (!username) return res.status(400).json({ error: 'Логин обязателен' });
+    if (!username || !username.trim()) {
+        return res.status(400).json({ error: 'Логин обязателен' });
+    }
 
     const total = amountMitrons || 1000;
 
@@ -118,6 +116,11 @@ app.post('/api/shop/pay', async (req, res) => {
             body: JSON.stringify({ username: username.trim(), cellsCount: 1, amountMitrons: total })
         });
         const site2Data = await site2Res.json();
+        
+        if (site2Data.error) {
+            return res.status(400).json({ error: site2Data.error });
+        }
+
         return res.json({ 
             success: true, 
             cellId: site2Data.cellId || 'A1',
