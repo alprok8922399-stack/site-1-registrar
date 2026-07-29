@@ -13,6 +13,7 @@
         input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
         button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
         button:hover { background: #219653; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
         .status-box { margin-top: 20px; padding: 15px; border-radius: 6px; display: none; font-size: 14px; }
         .success { background: #e8f8f5; color: #27ae60; border: 1px solid #27ae60; }
         .error { background: #fce4d6; color: #d35400; border: 1px solid #d35400; }
@@ -40,8 +41,8 @@
         </div>
         
         <div style="margin-top: 25px; text-align: center;">
-            <p style="font-size: 15px; color: #666;">Имитация покупки товара стоимостью <strong>1 000 M ($130 USD)</strong></p>
-            <button id="payBtn" style="background: #3498db;">Оплатить заказ (1 000 M / $130 USD)</button>
+            <p style="font-size: 15px; color: #666;">Покупка подарочного сертификата стоимостью <strong>1 000 M ($130 USD)</strong></p>
+            <button id="payBtn" style="background: #3498db;">Оплатить Сертификат на 1000 Митронов ($130 USD)</button>
         </div>
     </div>
 
@@ -68,10 +69,12 @@
         msgBox.innerText = text;
     }
 
-    // 1. Регистрация на маркетплейсе
+    // 1. Регистрация на маркетплейсе (без постановки в матрицу!)
     registerBtn.addEventListener('click', async () => {
         const username = usernameInput.value.trim();
         if (!username) return alert('Введите логин!');
+
+        registerBtn.disabled = true;
 
         try {
             const res = await fetch(`${API_URL}/shop/register`, {
@@ -83,6 +86,7 @@
 
             if (data.error) {
                 showMsg(data.error, true);
+                registerBtn.disabled = false;
             } else {
                 currentLoggedUser = username;
                 authSection.style.display = 'none';
@@ -92,12 +96,16 @@
             }
         } catch (err) {
             showMsg('Ошибка сети при регистрации', true);
+            registerBtn.disabled = false;
         }
     });
 
-    // 2. Оплата товара (1 000 M / $130 USD)
+    // 2. Оплата Сертификата (Только здесь логин встаёт в матрицу!)
     payBtn.addEventListener('click', async () => {
         if (!currentLoggedUser) return;
+
+        payBtn.disabled = true;
+        payBtn.innerText = 'Обработка оплаты...';
 
         try {
             const res = await fetch(`${API_URL}/shop/pay`, {
@@ -109,16 +117,20 @@
 
             if (data.error) {
                 showMsg(data.error, true);
+                payBtn.disabled = false;
+                payBtn.innerText = 'Оплатить Сертификат на 1000 Митронов ($130 USD)';
             } else {
                 paymentStatus.innerText = 'ОПЛАЧЕНО / ДОСТАВКА';
                 paymentStatus.style.color = '#27ae60';
                 userBalance.innerText = `${data.shopUserStatus?.balance || 0} M ($${((data.shopUserStatus?.balance || 0) * 0.13).toFixed(2)} USD)`;
                 payBtn.style.display = 'none';
                 
-                showMsg(`Успешная оплата на 1 000 M ($130 USD)! Вы зарезервировали место в матрице.`);
+                showMsg(`Успешная оплата Сертификата на 1 000 M ($130 USD)! Вы зарезервировали место в матрице.`);
             }
         } catch (err) {
             showMsg('Ошибка сети при оплате', true);
+            payBtn.disabled = false;
+            payBtn.innerText = 'Оплатить Сертификат на 1000 Митронов ($130 USD)';
         }
     });
 </script>
