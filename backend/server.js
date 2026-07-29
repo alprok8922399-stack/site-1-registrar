@@ -1,3 +1,8 @@
+/**
+ * Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
+ * Проект: MITRON
+ */
+
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
@@ -86,21 +91,20 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Регистрация в магазине (ТОЛЬКО создаёт профиль, НЕ ставит в матрицу!)
+// Регистрация профиля в магазине
 app.post('/api/shop/register', async (req, res) => {
     const { username } = req.body || {};
     if (!username || !username.trim()) {
         return res.status(400).json({ error: 'Логин обязателен' });
     }
 
-    // Возвращаем успех для фронтенда, в матрицу НЕ ставим
     return res.json({ 
         success: true, 
-        message: 'Регистрация успешна. Ожидайте оплаты сертификата.' 
+        message: 'Регистрация успешна. Ожидайте оплаты товаров.' 
     });
 });
 
-// Оплата "Сертификата на 1000 Митронов" (Только здесь происходит постановка в матрицу!)
+// Оплата и активация ячейки
 app.post('/api/shop/pay', async (req, res) => {
     const { username, amountMitrons } = req.body || {};
     if (!username || !username.trim()) {
@@ -108,12 +112,21 @@ app.post('/api/shop/pay', async (req, res) => {
     }
 
     const total = amountMitrons || 1000;
+    const validation = validateCartTotal(Number(total) || 0);
+
+    if (!validation.valid) {
+        return res.status(400).json({ error: validation.message });
+    }
 
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.trim(), cellsCount: 1, amountMitrons: total })
+            body: JSON.stringify({ 
+                username: username.trim(), 
+                cellsCount: validation.cellsCount, 
+                amountMitrons: validation.totalMitrons 
+            })
         });
         const site2Data = await site2Res.json();
         
@@ -124,6 +137,7 @@ app.post('/api/shop/pay', async (req, res) => {
         return res.json({ 
             success: true, 
             cellId: site2Data.cellId || 'A1',
+            cellsCount: validation.cellsCount,
             shopUserStatus: { balance: 0 }
         });
     } catch (err) {
@@ -136,14 +150,14 @@ app.get('/api/shop/catalog', (req, res) => {
     res.json({ success: true, catalog: getProductsCatalog() });
 });
 
-// API Валидации
+// API Валидации Корзины
 app.post('/api/shop/validate-cart', (req, res) => {
     const { totalMitrons } = req.body || {};
     const validation = validateCartTotal(Number(totalMitrons) || 0);
     res.json(validation);
 });
 
-// API Мультипокупки
+// API Мультипокупки и передачи ячеек на Сайт 2
 app.post('/api/shop/checkout', async (req, res) => {
     const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
     
@@ -171,7 +185,7 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            logEvent(`Покупатель ${username} совершил покупку на ${validation.totalMitrons} M ($${(validation.totalMitrons * 0.13).toFixed(2)} USD) и занял ${validation.cellsCount} яч.`);
+            logEvent(`Покупатель ${username} совершил покупку на ${validation.totalMitrons} M и занял ${validation.cellsCount} яч. на Сайте 2`);
             return res.json({ 
                 success: true, 
                 cellsCount: validation.cellsCount,
