@@ -95,7 +95,7 @@ app.post('/api/shop/register', async (req, res) => {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.trim(), uplineUser: sponsor || null, cellsCount: 1 })
+            body: JSON.stringify({ username: username.trim(), uplineUser: sponsor || null, cellsCount: 1, amountMitrons: 1000 })
         });
         const site2Data = await site2Res.json();
         return res.json({ success: true, ...site2Data });
@@ -106,17 +106,23 @@ app.post('/api/shop/register', async (req, res) => {
 
 // Совместимость со старым интерфейсом магазина (/api/shop/pay)
 app.post('/api/shop/pay', async (req, res) => {
-    const { username } = req.body || {};
+    const { username, amountMitrons } = req.body || {};
     if (!username) return res.status(400).json({ error: 'Логин обязателен' });
+
+    const total = amountMitrons || 1000;
 
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: username.trim(), cellsCount: 1 })
+            body: JSON.stringify({ username: username.trim(), cellsCount: 1, amountMitrons: total })
         });
         const site2Data = await site2Res.json();
-        return res.json({ success: true, cellId: site2Data.cellId || 'A1' });
+        return res.json({ 
+            success: true, 
+            cellId: site2Data.cellId || 'A1',
+            shopUserStatus: { balance: 0 }
+        });
     } catch (err) {
         return res.status(500).json({ error: `Ошибка связи с Сайтом 2: ${err.message}` });
     }
@@ -162,7 +168,7 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            logEvent(`Покупатель ${username} совершил покупку на ${validation.totalMitrons} M и занял ${validation.cellsCount} яч.`);
+            logEvent(`Покупатель ${username} совершил покупку на ${validation.totalMitrons} M ($${(validation.totalMitrons * 0.13).toFixed(2)} USD) и занял ${validation.cellsCount} яч.`);
             return res.json({ 
                 success: true, 
                 cellsCount: validation.cellsCount,
