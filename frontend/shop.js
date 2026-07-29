@@ -3,7 +3,7 @@ const logBox = document.getElementById('logBox');
 const buyBtn = document.getElementById('buyBtn');
 const startRobotBtn = document.getElementById('startRobotBtn');
 
-let currentCartTotal = 0;
+let currentCartTotal = 1000; // По умолчанию берем 1000 M для первой тестовой покупки
 let cartItems = [];
 
 // Вспомогательная функция для вывода логов на экран телефона
@@ -24,7 +24,7 @@ function validateCartUI(totalMitrons) {
     }
 
     const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
-    const minAllowed = targetBracket - 10; // Например 990, 1990, 2990 и т.д.
+    const minAllowed = targetBracket - 10; // 990, 1990, 2990 и т.д.
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
         const cellsCount = targetBracket / 1000;
@@ -39,32 +39,12 @@ function validateCartUI(totalMitrons) {
     }
 }
 
-// Функция обновления состояния кнопки оплаты и подсказки
-function updateCheckoutStatus(totalMitrons) {
-    currentCartTotal = totalMitrons;
-    const validation = validateCartUI(totalMitrons);
-    
-    const cartStatusElement = document.getElementById('cartStatusText');
+// Находим кнопку регистрации/покупки на странице
+const regBtn = document.querySelector('button') || buyBtn;
 
-    if (validation.valid) {
-        if (buyBtn) buyBtn.disabled = false;
-        if (cartStatusElement) {
-            cartStatusElement.style.color = '#2ecc71';
-            cartStatusElement.innerText = `✓ Готово к оплате! Сумма: ${totalMitrons} M (мест в матрице: ${validation.cellsCount})`;
-        }
-    } else {
-        if (buyBtn) buyBtn.disabled = true;
-        if (cartStatusElement) {
-            cartStatusElement.style.color = '#e74c3c';
-            cartStatusElement.innerText = validation.message;
-        }
-    }
-}
-
-// --- КНОПКА: ИМИТАЦИЯ РУЧНОЙ ПОКУПКИ ---
-if (buyBtn) {
-    buyBtn.addEventListener('click', async () => {
-        const usernameInput = document.getElementById('buyerName');
+if (regBtn) {
+    regBtn.addEventListener('click', async () => {
+        const usernameInput = document.getElementById('buyerName') || document.querySelector('input[type="text"]');
         const sponsorInput = document.getElementById('buyerSponsor');
         
         const username = usernameInput ? usernameInput.value.trim() : '';
@@ -81,8 +61,24 @@ if (buyBtn) {
             return;
         }
 
-        buyBtn.disabled = true;
-        log(`Запуск оплаты покупки для: ${username} на сумму ${currentCartTotal} M...`);
+        regBtn.disabled = true;
+        
+        // Создаем плашку сообщения об ошибке/успехе под кнопкой
+        let statusBox = document.querySelector('.status-box');
+        if (!statusBox) {
+            statusBox = document.createElement('div');
+            statusBox.className = 'status-box';
+            statusBox.style.marginTop = '15px';
+            statusBox.style.padding = '12px';
+            statusBox.style.borderRadius = '8px';
+            statusBox.style.textAlign = 'center';
+            statusBox.style.fontWeight = 'bold';
+            regBtn.parentNode.appendChild(statusBox);
+        }
+
+        statusBox.style.backgroundColor = '#e8f8f5';
+        statusBox.style.color = '#117a65';
+        statusBox.innerText = `Обработка покупки для ${username}...`;
 
         try {
             const checkoutRes = await fetch(`${API_URL}/shop/checkout`, {
@@ -101,45 +97,16 @@ if (buyBtn) {
                 throw new Error(checkoutData.error || 'Ошибка при проведении покупки');
             }
 
-            log(`💰 Оплата на сумму ${currentCartTotal} M успешно выполнена!`);
-            log(`💸 450 M/ячейку отправлено на покупку товара, остаток осел в кошельке.`);
-            log(`🟢 На Сайте 2 зарезервировано ячеек: ${checkoutData.cellsCount} (стартовая: ${checkoutData.cellId})`);
-
-            alert(`Покупка успешна! Занято ячеек в матрице: ${checkoutData.cellsCount}`);
+            statusBox.style.backgroundColor = '#d4efdf';
+            statusBox.style.color = '#196f3d';
+            statusBox.innerText = `✓ Покупка успешна! Место в матрице: ${checkoutData.cellId} (ячеек: ${checkoutData.cellsCount})`;
 
         } catch (err) {
-            log(`❌ Ошибка: ${err.message}`);
+            statusBox.style.backgroundColor = '#fadbd8';
+            statusBox.style.color = '#78281f';
+            statusBox.innerText = `Ошибка: ${err.message}`;
         } finally {
-            updateCheckoutStatus(currentCartTotal);
-        }
-    });
-}
-
-// --- КНОПКА: УПРАВЛЕНИЕ РОБОТОМ ---
-if (startRobotBtn) {
-    startRobotBtn.addEventListener('click', async () => {
-        const botCountInput = document.getElementById('botCount');
-        const count = botCountInput ? parseInt(botCountInput.value, 10) : 10;
-
-        startRobotBtn.disabled = true;
-        log(`🤖 Запуск Автобота (порционный режим по 10-20 ботов)...`);
-
-        try {
-            const res = await fetch(`${API_URL}/robot/start`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ batchSize: count })
-            });
-            const data = await res.json();
-            if (data.success) {
-                log(`🟢 Автобот запущен! Логи будут поступать с сервера.`);
-            } else {
-                log(`❌ Ошибка запуска автобота.`);
-            }
-        } catch (err) {
-            log(`❌ Ошибка сети при запуске робота: ${err.message}`);
-        } finally {
-            startRobotBtn.disabled = false;
+            regBtn.disabled = false;
         }
     });
 }
