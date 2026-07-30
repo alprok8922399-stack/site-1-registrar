@@ -106,7 +106,7 @@ app.post('/api/shop/register', async (req, res) => {
 
 // Оплата и активация ячейки
 app.post('/api/shop/pay', async (req, res) => {
-    const { username, amountMitrons } = req.body || {};
+    const { username, amountMitrons, uplineUser } = req.body || {};
     if (!username || !username.trim()) {
         return res.status(400).json({ error: 'Логин обязателен' });
     }
@@ -125,7 +125,8 @@ app.post('/api/shop/pay', async (req, res) => {
             body: JSON.stringify({ 
                 username: username.trim(), 
                 cellsCount: validation.cellsCount, 
-                amountMitrons: validation.totalMitrons 
+                amountMitrons: validation.totalMitrons,
+                uplineUser: uplineUser || null
             })
         });
         const site2Data = await site2Res.json();
