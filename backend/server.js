@@ -7,6 +7,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
+const fs = require('fs');
 const { getProductsCatalog, validateCartTotal } = require('./products');
 
 const app = express();
@@ -15,8 +16,21 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-// Абсолютный путь к папке frontend для защиты от ошибок путей на Render
-const frontendPath = path.resolve(__dirname, '../../frontend');
+// Универсальное определение пути к папке frontend для Render
+function getFrontendPath() {
+    const possiblePaths = [
+        path.resolve(__dirname, '../frontend'),
+        path.resolve(__dirname, '../../frontend'),
+        path.resolve(process.cwd(), 'frontend'),
+        path.resolve(process.cwd(), '../frontend')
+    ];
+    for (const p of possiblePaths) {
+        if (fs.existsSync(p)) return p;
+    }
+    return path.resolve(__dirname, '../../frontend');
+}
+
+const frontendPath = getFrontendPath();
 
 // Разделы и статика
 app.use(express.static(frontendPath));
@@ -91,7 +105,12 @@ function stopRobot() {
 
 // Корень сайта
 app.get('/', (req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
+    const indexPath = path.join(frontendPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.send('Сайт 1 работает! Страница frontend/index.html загружается...');
+    }
 });
 
 // API Каталога товаров
