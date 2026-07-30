@@ -117,7 +117,7 @@ function validateCartTotal(totalMitrons) {
             targetBracket: targetBracket 
         };
     } else {
-        const needed = minAllowed - totalMitrons;
+        const needed = Math.round(minAllowed - totalMitrons);
         return { 
             valid: false, 
             message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
