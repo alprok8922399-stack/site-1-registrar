@@ -9,14 +9,14 @@
 const MIN_COEFFICIENT = 2.2;
 const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
 
-// Каталог товаров с парсинг-параметрами (минимальная себестоимость и потолок цен по рынку)
+// Базовый каталог товаров с возможностью динамического парсинга с внешних площадок
 const initialProducts = [
     {
         id: 1,
         title: "Сертификат MITRON 1000",
         category: "Сертификаты",
         costUsdt: 130, 
-        ceilingPriceUsdt: 130, // Для чистого сертификата строго 1000 M
+        ceilingPriceUsdt: 130, // Чистый сертификат ровно 1000 M
         isCeilingApplied: false,
         image: "https://via.placeholder.com/300x200?text=Certificate+1000"
     },
@@ -25,7 +25,7 @@ const initialProducts = [
         title: "Смарт-часы MITRON Watch Pro",
         category: "Электроника",
         costUsdt: 65, 
-        ceilingPriceUsdt: 160, // Потолок цен по рынку (превышает 65 * 2.2 = 143 USDT)
+        ceilingPriceUsdt: 160, // Потолок цен по рынку (разрыв >= 2.2)
         isCeilingApplied: true,
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
@@ -34,7 +34,7 @@ const initialProducts = [
         title: "Фирменное худи MITRON DAO",
         category: "Одежда",
         costUsdt: 32.5, 
-        ceilingPriceUsdt: 85, // Потолок цен по рынку (превышает 32.5 * 2.2 = 71.5 USDT)
+        ceilingPriceUsdt: 85, // Потолок цен по рынку (разрыв >= 2.2)
         isCeilingApplied: true,
         image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
     }
@@ -42,15 +42,15 @@ const initialProducts = [
 
 /**
  * Расчет розничной цены в Митронах по правилу x2.2 и Потолка цен:
- * 1. Нижний порог = себестоимость * 2.2
- * 2. Если Потолок цен выше нижнего порога, подтягиваем к Потолку цен.
+ * 1. Вычисляется средний минимальный порог = себестоимость * 2.2
+ * 2. Если Потолок цен превышает этот порог, подтягивается к Потолку цен.
  */
 function calculateRetailPriceMitrons(product) {
     const minPriceUsdt = product.costUsdt * MIN_COEFFICIENT;
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
     const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
     
-    // Флаг подтяжки к потолку (разрыв больше 2.2)
+    // Пометка '*', если цена установлена по Потолку (соотношение Ceiling / Cost >= 2.2)
     const hasCeilingGap = (product.ceilingPriceUsdt / product.costUsdt) >= MIN_COEFFICIENT;
 
     return {
@@ -61,14 +61,13 @@ function calculateRetailPriceMitrons(product) {
 }
 
 /**
- * Получить каталог товаров с обработанной экономикой
+ * Получить полный каталог товаров с просчитанной экономикой
  */
 function getProductsCatalog() {
     return initialProducts.map(product => {
         const priceData = calculateRetailPriceMitrons(product);
         const effectiveCoeff = (priceData.priceMitrons / (product.costUsdt * MITRON_PER_USDT)).toFixed(2);
         
-        // Пометка '*' если цена подтянута к Потолку (разрыв >= 2.2)
         const displayTitle = priceData.hasCeilingGap ? `${product.title} *` : product.title;
 
         return {
@@ -80,6 +79,15 @@ function getProductsCatalog() {
             description: `Себестоимость: ${product.costUsdt} USDT | Наценка: x${effectiveCoeff} | Итого: ${priceData.priceMitrons} M`
         };
     });
+}
+
+/**
+ * Модуль подбора доборных товаров для закрытия нехватки до ближайшей 1000 М
+ */
+function suggestAddonProducts(neededMitrons) {
+    const catalog = getProductsCatalog();
+    // Ищем товары, близкие по стоимости к недостающей сумме
+    return catalog.filter(p => p.priceMitrons <= neededMitrons + 50);
 }
 
 /**
@@ -106,7 +114,7 @@ function validateCartTotal(totalMitrons) {
 
     // Определяем целевой диапазон (1000, 2000, 3000, 4000 или 5000)
     const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
-    const minAllowed = targetBracket - 10; // Погрешность в минус 10 Митронов (например, 2990 M)
+    const minAllowed = targetBracket - 10; // Допуск в минус 10 Митронов (например, 2990 M)
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
         const cellsCount = targetBracket / 1000;
@@ -118,11 +126,13 @@ function validateCartTotal(totalMitrons) {
         };
     } else {
         const needed = Math.round(minAllowed - totalMitrons);
+        const addons = suggestAddonProducts(needed > 0 ? needed : 0);
         return { 
             valid: false, 
             message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
             targetBracket: targetBracket,
-            needed: needed > 0 ? needed : 0
+            needed: needed > 0 ? needed : 0,
+            addons: addons
         };
     }
 }
@@ -130,5 +140,6 @@ function validateCartTotal(totalMitrons) {
 module.exports = {
     getProductsCatalog,
     calculateRetailPriceMitrons,
-    validateCartTotal
+    validateCartTotal,
+    suggestAddonProducts
 };
