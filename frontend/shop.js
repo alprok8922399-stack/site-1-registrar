@@ -7,25 +7,7 @@
 const API_URL = '/api';
 let cart = [];
 
-// 1. Алгоритм расчёта цены товара по ТЗ (x2.2 или Потолок)
-function calculatePrice(p) {
-    const minAvg = p.minPrice || p.price;
-    const ceilingAvg = p.ceilingPrice || (minAvg * 2.5);
-    const ratio = ceilingAvg / minAvg;
-
-    let finalPrice = 0;
-    let isCeiling = false;
-
-    if (ratio >= 2.2) {
-        finalPrice = Math.round(ceilingAvg);
-        isCeiling = true;
-    } else {
-        finalPrice = Math.round(minAvg * 2.2);
-    }
-    return { priceM: finalPrice, isCeiling };
-}
-
-// 2. Отрисовка товаров на витрине
+// 1. Отрисовка товаров на витрине
 async function loadProducts() {
     const grid = document.getElementById('productGrid');
     if (!grid) return;
@@ -36,27 +18,30 @@ async function loadProducts() {
         if (res.ok) {
             products = await res.json();
         } else {
-            // Резервный список если сервер еще загружается
+            // Резервный список с поддержкой флага Потолка (*)
             products = [
-                { id: 1, name: "Беспроводные наушники Pro", minPrice: 200, ceilingPrice: 500, img: "https://picsum.photos/300/200?random=1" },
-                { id: 2, name: "Смарт-часы Mitron Band", minPrice: 300, ceilingPrice: 800, img: "https://picsum.photos/300/200?random=2" },
-                { id: 3, name: "Портативная колонка Boom", minPrice: 150, ceilingPrice: 300, img: "https://picsum.photos/300/200?random=3" },
-                { id: 4, name: "Рюкзак городской Shield", minPrice: 100, ceilingPrice: 250, img: "https://picsum.photos/300/200?random=4" },
-                { id: 5, name: "Powerbank 20000 mAh", minPrice: 180, ceilingPrice: 420, img: "https://picsum.photos/300/200?random=5" }
+                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, hasStarMark: false },
+                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, hasStarMark: true },
+                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, hasStarMark: true }
             ];
         }
 
         grid.innerHTML = products.map(p => {
-            const { priceM, isCeiling } = calculatePrice(p);
+            const displayTitle = p.title || p.name;
+            const priceM = p.priceMitrons || p.priceM || 1000;
+            const image = p.image || p.img || 'https://via.placeholder.com/300x200';
+            const desc = p.description || '';
+
             return `
                 <div class="card">
-                    <img src="${p.img || 'https://picsum.photos/300/200'}" alt="${p.name}">
+                    <img src="${image}" alt="${displayTitle}">
                     <div class="card-content">
-                        <div class="card-title">${p.name}</div>
-                        <div class="card-price">
-                            ${priceM} M ${isCeiling ? '<span class="ceiling-tag">*</span>' : ''}
+                        <div class="card-title">${displayTitle}</div>
+                        ${desc ? `<div style="font-size:11px; color:#777; margin-bottom:5px;">${desc}</div>` : ''}
+                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#00b894; margin-bottom:10px;">
+                            ${priceM} M
                         </div>
-                        <button class="btn btn-add" onclick="addToCart('${p.id}', '${p.name}', ${priceM})">В корзину</button>
+                        <button class="btn btn-add" style="width:100%; padding:10px; background:#00b894; color:#fff; border:none; border-radius:5px; cursor:pointer;" onclick="addToCart('${p.id}', '${displayTitle.replace(/'/g, "\\'")}', ${priceM})">В корзину</button>
                     </div>
                 </div>
             `;
@@ -66,7 +51,7 @@ async function loadProducts() {
     }
 }
 
-// 3. Управление корзиной
+// 2. Управление корзиной
 function addToCart(id, name, priceM) {
     cart.push({ id, name, priceM });
     updateCartUI();
@@ -78,7 +63,7 @@ function removeFromCart(index) {
     updateCartUI();
 }
 
-// 4. Отрисовка корзины и проверок по ТЗ
+// 3. Отрисовка корзины и динамических проверок
 function updateCartUI() {
     const badge = document.getElementById('cartBadge');
     const itemsContainer = document.getElementById('cartItems');
@@ -92,12 +77,12 @@ function updateCartUI() {
         itemsContainer.innerHTML = '<p style="color:#999; text-align:center; margin-top:30px;">Корзина пуста</p>';
     } else {
         itemsContainer.innerHTML = cart.map((item, idx) => `
-            <div class="cart-item">
+            <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
                 <div>
                     <strong>${item.name}</strong>
                     <div style="font-size:12px; color:#666;">${item.priceM} M</div>
                 </div>
-                <button class="btn" style="color:red; background:none; font-size:16px;" onclick="removeFromCart(${idx})">✕</button>
+                <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
             </div>
         `).join('');
     }
@@ -108,7 +93,7 @@ function updateCartUI() {
     validateCartUI(totalM);
 }
 
-// 5. Строгая валидация корзины (-10 M) по ТЗ
+// 4. Строгая валидация корзины (-10 M) по ТЗ с выводом нехватки
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -128,7 +113,7 @@ function validateCartUI(totalM) {
         return;
     }
 
-    // Допустимые диапазоны для 1-5 ячеек
+    // Допустимые диапазоны для 1-5 ячеек (погрешность до -10 M)
     const ranges = [
         { min: 990, max: 1000, cells: 1 },
         { min: 1990, max: 2000, cells: 2 },
@@ -144,7 +129,8 @@ function validateCartUI(totalM) {
         hint.innerText = `Сумма корзины корректна! Активируется ячеек на Сайте 2: ${match.cells}.`;
         payBtn.disabled = false;
     } else {
-        let target = ranges.find(r => r.min > totalM);
+        // Определение целевого порога
+        let target = ranges.find(r => r.max >= totalM);
         if (!target) target = ranges[ranges.length - 1];
 
         const needMore = target.min - totalM;
@@ -154,11 +140,19 @@ function validateCartUI(totalM) {
     }
 }
 
-// 6. Оплата заказа
+// 5. Оплата заказа и передача на Сайт 2
 async function processPayment() {
     const totalM = cart.reduce((sum, item) => sum + item.priceM, 0);
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
+    const userInput = document.getElementById('usernameInput');
+
+    const username = userInput ? userInput.value.trim() : 'Пупкин';
+
+    if (!username) {
+        alert('Пожалуйста, введите логин покупателя');
+        return;
+    }
 
     if (payBtn) payBtn.disabled = true;
     if (hint) {
@@ -171,6 +165,7 @@ async function processPayment() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                username: username,
                 totalMitrons: totalM,
                 cartItems: cart
             })
