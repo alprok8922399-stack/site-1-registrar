@@ -147,7 +147,11 @@ app.post('/api/shop/pay', async (req, res) => {
     const validation = validateCartTotal(Number(total) || 0);
 
     if (!validation.valid) {
-        return res.status(400).json({ success: false, error: validation.message });
+        return res.status(400).json({ 
+            success: false, 
+            error: validation.message,
+            addons: validation.addons || []
+        });
     }
 
     try {
@@ -195,7 +199,11 @@ app.post('/api/shop/checkout', async (req, res) => {
 
     const validation = validateCartTotal(Number(totalMitrons) || 0);
     if (!validation.valid) {
-        return res.status(400).json({ success: false, error: validation.message });
+        return res.status(400).json({ 
+            success: false, 
+            error: validation.message,
+            addons: validation.addons || []
+        });
     }
 
     try {
