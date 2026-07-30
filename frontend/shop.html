@@ -3,136 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Наш Маркетплейс — Личный кабинет</title>
+    <title>MITRON — Маркетплейс</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #f4f6f9; margin: 0; padding: 20px; color: #333; }
-        .container { max-width: 500px; margin: 40px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-        h2 { color: #2c3e50; text-align: center; margin-bottom: 25px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
-        button { width: 100%; padding: 12px; background: #27ae60; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #219653; }
-        button:disabled { background: #bdc3c7; cursor: not-allowed; }
-        .status-box { margin-top: 20px; padding: 15px; border-radius: 6px; display: none; font-size: 14px; }
-        .success { background: #e8f8f5; color: #27ae60; border: 1px solid #27ae60; }
-        .error { background: #fce4d6; color: #d35400; border: 1px solid #d35400; }
-        .user-info { background: #ebf5fb; padding: 15px; border-radius: 6px; margin-top: 20px; border-left: 5px solid #3498db; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f6f9; color: #333; padding-bottom: 50px; }
+        
+        /* Шапка */
+        header { background: #1e272e; color: #fff; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; sticky: top; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .logo { font-size: 20px; font-weight: bold; color: #00b894; letter-spacing: 1px; }
+        .nav-btns { display: flex; gap: 10px; align-items: center; }
+        
+        .btn-header { background: #222f3e; color: #fff; border: 1px solid #576574; padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+        .btn-cart { background: #00b894; border: none; color: white; }
+        .badge { background: #ff4757; color: white; border-radius: 50%; padding: 2px 6px; font-size: 11px; margin-left: 4px; }
+
+        .container { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
+        h2 { margin-bottom: 20px; font-size: 22px; color: #2c3e50; }
+
+        /* Сетка товаров */
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+        
+        /* Выезжающая/Модальная корзина */
+        .cart-drawer { position: fixed; top: 0; right: -400px; width: 100%; max-width: 380px; height: 100%; background: #fff; box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 1000; transition: right 0.3s ease; padding: 20px; display: flex; flex-direction: column; }
+        .cart-drawer.open { right: 0; }
+        .cart-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px; }
+        .cart-title { font-size: 18px; font-weight: bold; }
+        .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #888; }
+        
+        .cart-items { flex: 1; overflow-y: auto; margin-bottom: 15px; }
+        
+        .cart-footer { border-top: 1px solid #eee; padding-top: 15px; }
+        .cart-total { font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 15px; }
+        
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; font-weight: bold; }
+        .form-group input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+        
+        .status-alert { padding: 10px; border-radius: 6px; font-size: 12px; font-weight: bold; text-align: center; margin-bottom: 12px; }
+        .status-alert.warning { background: #ffeaa7; color: #d63031; }
+        .status-alert.success { background: #55efc4; color: #00b894; }
+        .status-alert.error { background: #ff7675; color: #fff; }
+
+        .btn-pay { width: 100%; padding: 12px; background: #00b894; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 15px; cursor: pointer; }
+        .btn-pay:disabled { background: #b2bec3; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>🛍️ Кабинет Покупателя</h2>
-    
-    <div id="authSection">
-        <div class="form-group">
-            <label for="usernameInput">Придумайте Логин для покупок:</label>
-            <input type="text" id="usernameInput" placeholder="Например: ivan_99">
+    <header>
+        <div class="logo">MITRON</div>
+        <div class="nav-btns">
+            <button class="btn-header btn-cart" onclick="toggleCart(true)">
+                🛒 Корзина <span id="cartBadge" class="badge">0</span>
+            </button>
         </div>
-        <button id="registerBtn">Зарегистрироваться в магазине</button>
+    </header>
+
+    <div class="container">
+        <h2>Витрина товаров</h2>
+        <div id="productGrid" class="product-grid">
+            </div>
     </div>
 
-    <div id="shopCabinet" style="display: none;">
-        <div class="user-info">
-            <p><strong>Вы вошли как:</strong> <span id="currentUsername">-</span></p>
-            <p><strong>Статус оплаты товара:</strong> <span id="paymentStatus" style="color: #e74c3c; font-weight: bold;">НЕ ОПЛАЧЕНО</span></p>
-            <p><strong>Ваш баланс кэшбэка:</strong> <span id="userBalance">0 M ($0 USD)</span></p>
+    <div id="cartDrawer" class="cart-drawer">
+        <div class="cart-header">
+            <div class="cart-title">🛒 Ваша Корзина</div>
+            <button class="close-btn" onclick="toggleCart(false)">✕</button>
         </div>
-        
-        <div style="margin-top: 25px; text-align: center;">
-            <p style="font-size: 15px; color: #666;">Покупка подарочного сертификата стоимостью <strong>1 000 M ($130 USD)</strong></p>
-            <button id="payBtn" style="background: #3498db;">Оплатить Сертификат на 1000 Митронов ($130 USD)</button>
+
+        <div id="cartItems" class="cart-items">
+            </div>
+
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span>Итого:</span>
+                <span id="cartTotalM">0 M</span>
+            </div>
+
+            <div class="form-group">
+                <label for="usernameInput">Логин покупателя:</label>
+                <input type="text" id="usernameInput" value="Пупкин" placeholder="Введите ваш логин">
+            </div>
+
+            <div id="cartHint" class="status-alert warning">
+                Добавьте товары в корзину для оформления заказа.
+            </div>
+
+            <button id="payBtn" class="btn-pay" onclick="processPayment()" disabled>ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ</button>
         </div>
     </div>
 
-    <div id="msgBox" class="status-box"></div>
-</div>
-
-<script>
-    const API_URL = '/api';
-    let currentLoggedUser = null;
-
-    const authSection = document.getElementById('authSection');
-    const shopCabinet = document.getElementById('shopCabinet');
-    const usernameInput = document.getElementById('usernameInput');
-    const registerBtn = document.getElementById('registerBtn');
-    const payBtn = document.getElementById('payBtn');
-    const currentUsername = document.getElementById('currentUsername');
-    const paymentStatus = document.getElementById('paymentStatus');
-    const userBalance = document.getElementById('userBalance');
-    const msgBox = document.getElementById('msgBox');
-
-    function showMsg(text, isError = false) {
-        msgBox.style.display = 'block';
-        msgBox.className = `status-box ${isError ? 'error' : 'success'}`;
-        msgBox.innerText = text;
-    }
-
-    // 1. Регистрация на маркетплейсе (без постановки в матрицу!)
-    registerBtn.addEventListener('click', async () => {
-        const username = usernameInput.value.trim();
-        if (!username) return alert('Введите логин!');
-
-        registerBtn.disabled = true;
-
-        try {
-            const res = await fetch(`${API_URL}/shop/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username })
-            });
-            const data = await res.json();
-
-            if (data.error) {
-                showMsg(data.error, true);
-                registerBtn.disabled = false;
-            } else {
-                currentLoggedUser = username;
-                authSection.style.display = 'none';
-                shopCabinet.style.display = 'block';
-                currentUsername.innerText = username;
-                showMsg('Вы успешно зарегистрировались на маркетплейсе! Товар ожидает оплаты.');
-            }
-        } catch (err) {
-            showMsg('Ошибка сети при регистрации', true);
-            registerBtn.disabled = false;
-        }
-    });
-
-    // 2. Оплата Сертификата (Только здесь логин встаёт в матрицу!)
-    payBtn.addEventListener('click', async () => {
-        if (!currentLoggedUser) return;
-
-        payBtn.disabled = true;
-        payBtn.innerText = 'Обработка оплаты...';
-
-        try {
-            const res = await fetch(`${API_URL}/shop/pay`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: currentLoggedUser, amountMitrons: 1000 })
-            });
-            const data = await res.json();
-
-            if (data.error) {
-                showMsg(data.error, true);
-                payBtn.disabled = false;
-                payBtn.innerText = 'Оплатить Сертификат на 1000 Митронов ($130 USD)';
-            } else {
-                paymentStatus.innerText = 'ОПЛАЧЕНО / ДОСТАВКА';
-                paymentStatus.style.color = '#27ae60';
-                userBalance.innerText = `${data.shopUserStatus?.balance || 0} M ($${((data.shopUserStatus?.balance || 0) * 0.13).toFixed(2)} USD)`;
-                payBtn.style.display = 'none';
-                
-                showMsg(`Успешная оплата Сертификата на 1 000 M ($130 USD)! Вы зарезервировали место в матрице.`);
-            }
-        } catch (err) {
-            showMsg('Ошибка сети при оплате', true);
-            payBtn.disabled = false;
-            payBtn.innerText = 'Оплатить Сертификат на 1000 Митронов ($130 USD)';
-        }
-    });
-</script>
+    <script src="shop.js"></script>
 </body>
 </html>
