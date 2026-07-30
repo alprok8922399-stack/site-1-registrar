@@ -1,61 +1,81 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление витриной, корзиной, валидация диапазонов (-10 M) и отправка покупок.
+ * Управление витриной, корзиной, валидация диапазонов (-10 M) и работа с Роботом.
  */
 
 const API_URL = '/api';
 let cart = [];
+let catalog = [];
 
-// 1. Отрисовка товаров на витрине
+// 1. Старт инициализации
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    checkAuthStatus();
+});
+
+// 2. Отрисовка товаров на витрине
 async function loadProducts() {
     const grid = document.getElementById('productGrid');
     if (!grid) return;
 
     try {
         const res = await fetch(`${API_URL}/products`);
-        let products = [];
         if (res.ok) {
-            products = await res.json();
+            catalog = await res.json();
         } else {
-            // Резервный список с поддержкой флага Потолка (*)
-            products = [
-                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, hasStarMark: false },
-                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, hasStarMark: true },
-                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, hasStarMark: true }
+            // Резервный список товаров
+            catalog = [
+                { id: "cert-1000", title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
+                { id: "watch-pro", title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
+                { id: "hoodie-dao", title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" }
             ];
         }
 
-        grid.innerHTML = products.map(p => {
-            const displayTitle = p.title || p.name;
-            const priceM = p.priceMitrons || p.priceM || 1000;
-            const image = p.image || p.img || 'https://via.placeholder.com/300x200';
-            const desc = p.description || '';
-
-            return `
-                <div class="card">
-                    <img src="${image}" alt="${displayTitle}">
-                    <div class="card-content">
-                        <div class="card-title">${displayTitle}</div>
-                        ${desc ? `<div style="font-size:11px; color:#777; margin-bottom:5px;">${desc}</div>` : ''}
-                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#00b894; margin-bottom:10px;">
-                            ${priceM} M
-                        </div>
-                        <button class="btn btn-add" style="width:100%; padding:10px; background:#00b894; color:#fff; border:none; border-radius:5px; cursor:pointer;" onclick="addToCart('${p.id}', '${displayTitle.replace(/'/g, "\\'")}', ${priceM})">В корзину</button>
-                    </div>
-                </div>
-            `;
-        }).join('');
+        renderCatalog();
     } catch (e) {
         console.error('Ошибка загрузки товаров:', e);
     }
 }
 
-// 2. Управление корзиной
-function addToCart(id, name, priceM) {
-    cart.push({ id, name, priceM });
-    updateCartUI();
-    toggleCart(true);
+function renderCatalog() {
+    const grid = document.getElementById('productGrid');
+    if (!grid) return;
+
+    grid.innerHTML = catalog.map(p => {
+        const displayTitle = p.title || p.name;
+        const priceM = p.priceMitrons || p.priceM || 1000;
+        const image = p.image || 'https://via.placeholder.com/300x200';
+        const desc = p.description || '';
+
+        return `
+            <div class="card">
+                <img src="${image}" alt="${displayTitle}">
+                <div class="card-content">
+                    <div>
+                        <div class="card-title">${displayTitle}</div>
+                        ${desc ? `<div style="font-size:11px; color:#777; margin-bottom:5px;">${desc}</div>` : ''}
+                    </div>
+                    <div>
+                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#00b894; margin-bottom:10px;">
+                            ${priceM} M
+                        </div>
+                        <button class="btn btn-add" style="width:100%; padding:10px; background:#00b894; color:#fff; border:none; border-radius:5px; cursor:pointer;" onclick="addToCart('${p.id}')">В корзину</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// 3. Управление корзиной
+function addToCart(productId) {
+    const item = catalog.find(p => String(p.id) === String(productId));
+    if (item) {
+        cart.push(item);
+        updateCartUI();
+        toggleCart(true);
+    }
 }
 
 function removeFromCart(index) {
@@ -63,7 +83,7 @@ function removeFromCart(index) {
     updateCartUI();
 }
 
-// 3. Отрисовка корзины и динамических проверок
+// 4. Отрисовка корзины и динамических проверок
 function updateCartUI() {
     const badge = document.getElementById('cartBadge');
     const itemsContainer = document.getElementById('cartItems');
@@ -71,29 +91,29 @@ function updateCartUI() {
 
     if (badge) badge.innerText = cart.length;
 
-    if (!itemsContainer) return;
-
-    if (cart.length === 0) {
-        itemsContainer.innerHTML = '<p style="color:#999; text-align:center; margin-top:30px;">Корзина пуста</p>';
-    } else {
-        itemsContainer.innerHTML = cart.map((item, idx) => `
-            <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
-                <div>
-                    <strong>${item.name}</strong>
-                    <div style="font-size:12px; color:#666;">${item.priceM} M</div>
+    if (itemsContainer) {
+        if (cart.length === 0) {
+            itemsContainer.innerHTML = '<p style="color:#999; text-align:center; margin-top:30px;">Корзина пуста</p>';
+        } else {
+            itemsContainer.innerHTML = cart.map((item, idx) => `
+                <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
+                    <div>
+                        <strong>${item.title || item.name}</strong>
+                        <div style="font-size:12px; color:#666;">${item.priceMitrons || item.priceM} M</div>
+                    </div>
+                    <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
                 </div>
-                <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
-            </div>
-        `).join('');
+            `).join('');
+        }
     }
 
-    const totalM = cart.reduce((sum, item) => sum + item.priceM, 0);
+    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
     if (totalEl) totalEl.innerText = `${totalM} M`;
 
     validateCartUI(totalM);
 }
 
-// 4. Строгая валидация корзины (-10 M) по ТЗ с выводом нехватки
+// 5. Строгая валидация корзины (-10 M) по ТЗ с выводом нехватки
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -129,7 +149,6 @@ function validateCartUI(totalM) {
         hint.innerText = `Сумма корзины корректна! Активируется ячеек на Сайте 2: ${match.cells}.`;
         payBtn.disabled = false;
     } else {
-        // Определение целевого порога
         let target = ranges.find(r => r.max >= totalM);
         if (!target) target = ranges[ranges.length - 1];
 
@@ -140,9 +159,9 @@ function validateCartUI(totalM) {
     }
 }
 
-// 5. Оплата заказа и передача на Сайт 2
+// 6. Оплата заказа и передача на Сайт 2
 async function processPayment() {
-    const totalM = cart.reduce((sum, item) => sum + item.priceM, 0);
+    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
@@ -150,7 +169,10 @@ async function processPayment() {
     const username = userInput ? userInput.value.trim() : 'Пупкин';
 
     if (!username) {
-        alert('Пожалуйста, введите логин покупателя');
+        if (hint) {
+            hint.className = 'status-alert error';
+            hint.innerText = 'Пожалуйста, укажите логин покупателя.';
+        }
         return;
     }
 
@@ -174,10 +196,13 @@ async function processPayment() {
         const data = await res.json();
 
         if (res.ok && data.success) {
-            alert(`Покупка успешно совершена! Создано ячеек на Сайте 2: ${data.cellsCount || 1}`);
+            if (hint) {
+                hint.className = 'status-alert success';
+                hint.innerText = `Успешно! Создано ячеек на Сайте 2: ${data.cellsCount || 1}`;
+            }
             cart = [];
             updateCartUI();
-            toggleCart(false);
+            setTimeout(() => toggleCart(false), 2000);
         } else {
             throw new Error(data.error || 'Ошибка при проведении оплаты');
         }
@@ -190,7 +215,26 @@ async function processPayment() {
     }
 }
 
-// Вспомогательное открытие/закрытие корзины
+// 7. Вход и Окна
+function checkAuthStatus() {
+    const user = localStorage.getItem('mitron_user');
+    const authBtn = document.getElementById('authBtn');
+    if (authBtn) {
+        authBtn.innerText = user ? `👤 ${user}` : '👤 Вход';
+    }
+}
+
+function handleAuthClick() {
+    const current = localStorage.getItem('mitron_user') || 'Пупкин';
+    const username = prompt('Введите ваш логин для входа:', current);
+    if (username) {
+        localStorage.setItem('mitron_user', username.trim());
+        const input = document.getElementById('usernameInput');
+        if (input) input.value = username.trim();
+        checkAuthStatus();
+    }
+}
+
 function toggleCart(open) {
     const drawer = document.getElementById('cartDrawer');
     if (drawer) drawer.classList.toggle('open', open);
@@ -198,11 +242,48 @@ function toggleCart(open) {
 
 function toggleModal(open) {
     const modal = document.getElementById('modalOverlay');
-    if (modal) modal.classList.toggle('open', open);
+    if (modal) {
+        modal.classList.toggle('open', open);
+        if (open) fetchBotStatus();
+    }
 }
 
-// Старт инициализации
-document.addEventListener('DOMContentLoaded', () => {
-    loadProducts();
-    updateCartUI();
-});
+// 8. Связь с Генератором Робота
+async function fetchBotStatus() {
+    const statusLabel = document.getElementById('statusLabel');
+    const actionBtn = document.getElementById('actionBtn');
+    const consoleLog = document.getElementById('consoleLog');
+
+    if (statusLabel) statusLabel.innerText = 'Запрос к серверу...';
+
+    try {
+        const res = await fetch(`${API_URL}/test-bot/status`);
+        const data = await res.json();
+
+        if (statusLabel) {
+            statusLabel.innerText = data.active ? 'Генератор АКТИВЕН' : 'Генератор ОСТАНОВЛЕН';
+            statusLabel.className = `status-box ${data.active ? 'active' : ''}`;
+        }
+
+        if (actionBtn) {
+            actionBtn.innerText = data.active ? 'Остановить Генератор' : 'Запустить Генератор';
+            actionBtn.onclick = () => toggleBot(!data.active);
+        }
+
+        if (consoleLog && data.logs) {
+            consoleLog.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
+        }
+    } catch (err) {
+        if (statusLabel) statusLabel.innerText = 'Сервер недоступен';
+        if (actionBtn) actionBtn.innerText = 'Повторить попытку';
+    }
+}
+
+async function toggleBot(enable) {
+    try {
+        await fetch(`${API_URL}/test-bot/${enable ? 'start' : 'stop'}`, { method: 'POST' });
+        fetchBotStatus();
+    } catch (err) {
+        console.error('Ошибка переключения генератора:', err);
+    }
+}
