@@ -16,7 +16,7 @@ app.use(cors());
 app.use(express.json());
 
 // Разделы и статика
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../../frontend')));
 
 let isRobotRunning = false;
 let robotTimeout = null;
@@ -88,18 +88,28 @@ function stopRobot() {
 
 // Корень сайта
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+});
+
+// API Каталога товаров
+app.get('/api/products', (req, res) => {
+    res.json(getProductsCatalog());
+});
+
+app.get('/api/shop/catalog', (req, res) => {
+    res.json({ success: true, catalog: getProductsCatalog() });
 });
 
 // Регистрация профиля в магазине
 app.post('/api/shop/register', async (req, res) => {
     const { username } = req.body || {};
     if (!username || !username.trim()) {
-        return res.status(400).json({ error: 'Логин обязателен' });
+        return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
     return res.json({ 
         success: true, 
+        username: username.trim(),
         message: 'Регистрация успешна. Ожидайте оплаты товаров.' 
     });
 });
@@ -108,14 +118,14 @@ app.post('/api/shop/register', async (req, res) => {
 app.post('/api/shop/pay', async (req, res) => {
     const { username, amountMitrons, uplineUser } = req.body || {};
     if (!username || !username.trim()) {
-        return res.status(400).json({ error: 'Логин обязателен' });
+        return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
     const total = amountMitrons || 1000;
     const validation = validateCartTotal(Number(total) || 0);
 
     if (!validation.valid) {
-        return res.status(400).json({ error: validation.message });
+        return res.status(400).json({ success: false, error: validation.message });
     }
 
     try {
@@ -132,7 +142,7 @@ app.post('/api/shop/pay', async (req, res) => {
         const site2Data = await site2Res.json();
         
         if (site2Data.error) {
-            return res.status(400).json({ error: site2Data.error });
+            return res.status(400).json({ success: false, error: site2Data.error });
         }
 
         return res.json({ 
@@ -142,13 +152,8 @@ app.post('/api/shop/pay', async (req, res) => {
             shopUserStatus: { balance: 0 }
         });
     } catch (err) {
-        return res.status(500).json({ error: `Ошибка связи с Сайтом 2: ${err.message}` });
+        return res.status(500).json({ success: false, error: `Ошибка связи с Сайтом 2: ${err.message}` });
     }
-});
-
-// API Каталога
-app.get('/api/shop/catalog', (req, res) => {
-    res.json({ success: true, catalog: getProductsCatalog() });
 });
 
 // API Валидации Корзины
@@ -163,7 +168,7 @@ app.post('/api/shop/checkout', async (req, res) => {
     const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
     
     if (!username || !username.trim()) {
-        return res.status(400).json({ success: false, error: "Укажите имя/логин покупателя" });
+        return res.status(400).json({ success: false, error: "Укажите логин покупателя" });
     }
 
     const validation = validateCartTotal(Number(totalMitrons) || 0);
@@ -186,7 +191,7 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            logEvent(`Покупатель ${username} совершил покупку на ${validation.totalMitrons} M и занял ${validation.cellsCount} яч. на Сайте 2`);
+            logEvent(`Покупатель ${username.trim()} совершил покупку на ${validation.totalMitrons} M и занял ${validation.cellsCount} яч. на Сайте 2`);
             return res.json({ 
                 success: true, 
                 cellsCount: validation.cellsCount,
