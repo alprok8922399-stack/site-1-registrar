@@ -100,7 +100,7 @@ window.openCartModal = function() {
                 <button onclick="document.getElementById('cartModal').style.display='none'" style="background:none; border:none; color:#64748b; font-size:1.5rem; cursor:pointer;">&times;</button>
             </div>
             <div style="max-height:200px; overflow-y:auto; margin-bottom:15px;">
-                ${cart.length === 0 ? '<p style="color:#94a3b8; text-align:center;">Корзина пуста</p>' : cart.map((item, i) => `
+                ${cart.length === 0 ? '<p style="color:#94a3b8; text-align:center;">Корзина пуста</p>' : cart.map((item) => `
                     <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
                         <span>${item.name}</span>
                         <span style="font-weight:bold; color:#10b981;">${item.price} M</span>
@@ -163,6 +163,7 @@ function appendToConsole(text, isError = false) {
     if (!consoleLog) return;
 
     const line = document.createElement('div');
+    line.className = 'log-line';
     line.style.padding = '3px 0';
     line.style.color = isError ? '#ef4444' : '#10b981';
     
@@ -219,6 +220,36 @@ function updateRobotUI(isActive) {
     }
 }
 
+// Прямой вызов переключения состояния робота
+window.toggleRobotState = function() {
+    const actionBtn = document.getElementById('actionBtn');
+    if (!actionBtn) return;
+
+    const isRunning = actionBtn.textContent.includes("ОСТАНОВИТЬ");
+    const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
+
+    if (!isRunning) {
+        appendToConsole("Запуск робота...");
+    } else {
+        appendToConsole("Остановка робота...");
+    }
+
+    fetch(`${API_URL}${endpoint}`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchSize: Math.floor(Math.random() * 11) + 10 })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            checkRobotStatus();
+        }
+    })
+    .catch(err => {
+        appendToConsole("Ошибка управления роботом: " + err.message, true);
+    });
+};
+
 window.openRobotModal = function() {
     let modal = document.getElementById('robotModal');
     if (!modal) {
@@ -232,14 +263,13 @@ window.openRobotModal = function() {
                     <button onclick="document.getElementById('robotModal').style.display='none'" style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
                 </div>
                 <div id="statusLabel" style="font-weight:bold; margin-bottom:15px;">Проверка статуса...</div>
-                <button id="actionBtn" style="width:100%; padding:12px; border-radius:8px; border:none; color:white; font-weight:bold; cursor:pointer; background:#3b82f6; margin-bottom:15px;">Загрузка...</button>
+                <button id="actionBtn" onclick="window.toggleRobotState()" style="width:100%; padding:12px; border-radius:8px; border:none; color:white; font-weight:bold; cursor:pointer; background:#3b82f6; margin-bottom:15px;">ЗАПУСТИТЬ РОБОТА</button>
                 <div id="consoleLog" style="background:#0f172a; height:180px; overflow-y:auto; border-radius:8px; padding:10px; font-family:monospace; font-size:0.8rem;">
                     <div>Ожидание запуска...</div>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
-        bindRobotEvents();
     } else {
         modal.style.display = 'flex';
     }
@@ -257,28 +287,6 @@ function checkRobotStatus() {
             const statusLabel = document.getElementById('statusLabel');
             if (statusLabel) statusLabel.textContent = "Ошибка связи с сервером";
         });
-}
-
-function bindRobotEvents() {
-    const actionBtn = document.getElementById('actionBtn');
-    if (actionBtn) {
-        actionBtn.onclick = () => {
-            const isRunning = actionBtn.textContent.includes("ОСТАНОВИТЬ");
-            const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
-
-            fetch(`${API_URL}${endpoint}`, { 
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ batchSize: Math.floor(Math.random() * 11) + 10 })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) {
-                    checkRobotStatus();
-                }
-            });
-        };
-    }
 }
 
 // ==========================================
