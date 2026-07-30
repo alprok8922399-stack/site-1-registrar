@@ -1,188 +1,213 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление корзиной, подсчет диапазонов (-10 M) и динамическая кнопка покупки.
+ * Управление витриной, корзиной, валидация диапазонов (-10 M) и отправка покупок.
  */
 
 const API_URL = '/api';
-const logBox = document.getElementById('logBox');
-const buyBtn = document.getElementById('buyBtn');
-const startRobotBtn = document.getElementById('startRobotBtn');
+let cart = [];
 
-let currentCartTotal = 1000; // Сумма корзины по умолчанию
-let cartItems = [];
+// 1. Алгоритм расчёта цены товара по ТЗ (x2.2 или Потолок)
+function calculatePrice(p) {
+    const minAvg = p.minPrice || p.price;
+    const ceilingAvg = p.ceilingPrice || (minAvg * 2.5);
+    const ratio = ceilingAvg / minAvg;
 
-// Вспомогательная функция для вывода логов на экран телефона
-function log(message) {
-    if (!logBox) return;
-    const time = new Date().toLocaleTimeString();
-    logBox.innerHTML += `[${time}] ${message}\n`;
-    logBox.scrollTop = logBox.scrollHeight;
-}
+    let finalPrice = 0;
+    let isCeiling = false;
 
-/**
- * Валидация корзины по допуску (-10 M):
- * 1000 M (990-1000 M)
- * 2000 M (1990-2000 M)
- * 3000 M (2990-3000 M)
- * 4000 M (3990-4000 M)
- * 5000 M (4990-5000 M)
- */
-function validateCartUI(totalMitrons) {
-    if (totalMitrons <= 0) {
-        return { 
-            valid: false, 
-            message: 'Корзина пуста. Добавьте товары.', 
-            needed: 1000, 
-            targetBracket: 1000,
-            cellsCount: 0
-        };
-    }
-    
-    if (totalMitrons > 5000) {
-        return { 
-            valid: false, 
-            message: 'Максимальный объем одной покупки — 5000 Митронов', 
-            needed: 0, 
-            targetBracket: 5000,
-            cellsCount: 5
-        };
-    }
-
-    const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
-    const minAllowed = targetBracket - 10; // 990, 1990, 2990, 3990, 4990 M
-    const cellsCount = targetBracket / 1000;
-
-    if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
-        return { 
-            valid: true, 
-            cellsCount: cellsCount, 
-            targetBracket: targetBracket 
-        };
+    if (ratio >= 2.2) {
+        finalPrice = Math.round(ceilingAvg);
+        isCeiling = true;
     } else {
-        const needed = Math.round(minAllowed - totalMitrons);
-        return { 
-            valid: false, 
-            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
-            needed: needed > 0 ? needed : 0,
-            targetBracket: targetBracket,
-            cellsCount: cellsCount
-        };
+        finalPrice = Math.round(minAvg * 2.2);
+    }
+    return { priceM: finalPrice, isCeiling };
+}
+
+// 2. Отрисовка товаров на витрине
+async function loadProducts() {
+    const grid = document.getElementById('productGrid');
+    if (!grid) return;
+
+    try {
+        const res = await fetch(`${API_URL}/products`);
+        let products = [];
+        if (res.ok) {
+            products = await res.json();
+        } else {
+            // Резервный список если сервер еще загружается
+            products = [
+                { id: 1, name: "Беспроводные наушники Pro", minPrice: 200, ceilingPrice: 500, img: "https://picsum.photos/300/200?random=1" },
+                { id: 2, name: "Смарт-часы Mitron Band", minPrice: 300, ceilingPrice: 800, img: "https://picsum.photos/300/200?random=2" },
+                { id: 3, name: "Портативная колонка Boom", minPrice: 150, ceilingPrice: 300, img: "https://picsum.photos/300/200?random=3" },
+                { id: 4, name: "Рюкзак городской Shield", minPrice: 100, ceilingPrice: 250, img: "https://picsum.photos/300/200?random=4" },
+                { id: 5, name: "Powerbank 20000 mAh", minPrice: 180, ceilingPrice: 420, img: "https://picsum.photos/300/200?random=5" }
+            ];
+        }
+
+        grid.innerHTML = products.map(p => {
+            const { priceM, isCeiling } = calculatePrice(p);
+            return `
+                <div class="card">
+                    <img src="${p.img || 'https://picsum.photos/300/200'}" alt="${p.name}">
+                    <div class="card-content">
+                        <div class="card-title">${p.name}</div>
+                        <div class="card-price">
+                            ${priceM} M ${isCeiling ? '<span class="ceiling-tag">*</span>' : ''}
+                        </div>
+                        <button class="btn btn-add" onclick="addToCart('${p.id}', '${p.name}', ${priceM})">В корзину</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error('Ошибка загрузки товаров:', e);
     }
 }
 
-/**
- * Обновление визуального состояния кнопки покупки и блока ошибок
- */
-function updateBuyButtonState() {
-    const regBtn = document.querySelector('button') || buyBtn;
-    if (!regBtn) return;
+// 3. Управление корзиной
+function addToCart(id, name, priceM) {
+    cart.push({ id, name, priceM });
+    updateCartUI();
+    toggleCart(true);
+}
 
-    let statusBox = document.querySelector('.status-box');
-    if (!statusBox) {
-        statusBox = document.createElement('div');
-        statusBox.className = 'status-box';
-        statusBox.style.marginTop = '15px';
-        statusBox.style.padding = '12px';
-        statusBox.style.borderRadius = '8px';
-        statusBox.style.textAlign = 'center';
-        statusBox.style.fontWeight = 'bold';
-        regBtn.parentNode.appendChild(statusBox);
-    }
+function removeFromCart(index) {
+    cart.splice(index, 1);
+    updateCartUI();
+}
 
-    const validation = validateCartUI(currentCartTotal);
+// 4. Отрисовка корзины и проверок по ТЗ
+function updateCartUI() {
+    const badge = document.getElementById('cartBadge');
+    const itemsContainer = document.getElementById('cartItems');
+    const totalEl = document.getElementById('cartTotalM');
 
-    if (!validation.valid) {
-        regBtn.disabled = true;
-        regBtn.style.opacity = '0.5';
-        regBtn.style.cursor = 'not-allowed';
-        regBtn.innerText = `Купить (${currentCartTotal} M)`;
+    if (badge) badge.innerText = cart.length;
 
-        statusBox.style.backgroundColor = '#fadbd8';
-        statusBox.style.color = '#78281f';
-        statusBox.innerText = validation.message;
+    if (!itemsContainer) return;
+
+    if (cart.length === 0) {
+        itemsContainer.innerHTML = '<p style="color:#999; text-align:center; margin-top:30px;">Корзина пуста</p>';
     } else {
-        regBtn.disabled = false;
-        regBtn.style.opacity = '1';
-        regBtn.style.cursor = 'pointer';
-        
-        // Динамический текст кнопки на 1-5 сертификатов
-        const certWord = validation.cellsCount === 1 ? 'сертификат' : (validation.cellsCount >= 5 ? 'сертификатов' : 'сертификата');
-        regBtn.innerText = `Купить ${validation.cellsCount} ${certWord} на ${validation.targetBracket} M`;
+        itemsContainer.innerHTML = cart.map((item, idx) => `
+            <div class="cart-item">
+                <div>
+                    <strong>${item.name}</strong>
+                    <div style="font-size:12px; color:#666;">${item.priceM} M</div>
+                </div>
+                <button class="btn" style="color:red; background:none; font-size:16px;" onclick="removeFromCart(${idx})">✕</button>
+            </div>
+        `).join('');
+    }
 
-        statusBox.style.backgroundColor = '#e8f8f5';
-        statusBox.style.color = '#117a65';
-        statusBox.innerText = `Корзина готова к оплате (${currentCartTotal} M). Займет ячеек на Сайте 2: ${validation.cellsCount}`;
+    const totalM = cart.reduce((sum, item) => sum + item.priceM, 0);
+    if (totalEl) totalEl.innerText = `${totalM} M`;
+
+    validateCartUI(totalM);
+}
+
+// 5. Строгая валидация корзины (-10 M) по ТЗ
+function validateCartUI(totalM) {
+    const hint = document.getElementById('cartHint');
+    const payBtn = document.getElementById('payBtn');
+    if (!hint || !payBtn) return;
+
+    if (totalM === 0) {
+        hint.className = 'status-alert warning';
+        hint.innerText = 'Добавьте товары в корзину для оформления заказа.';
+        payBtn.disabled = true;
+        return;
+    }
+
+    if (totalM > 5000) {
+        hint.className = 'status-alert error';
+        hint.innerText = `Превышен лимит! Максимальная сумма заказа — 5000 M. Уберите товары на ${totalM - 5000} M.`;
+        payBtn.disabled = true;
+        return;
+    }
+
+    // Допустимые диапазоны для 1-5 ячеек
+    const ranges = [
+        { min: 990, max: 1000, cells: 1 },
+        { min: 1990, max: 2000, cells: 2 },
+        { min: 2990, max: 3000, cells: 3 },
+        { min: 3990, max: 4000, cells: 4 },
+        { min: 4990, max: 5000, cells: 5 }
+    ];
+
+    const match = ranges.find(r => totalM >= r.min && totalM <= r.max);
+
+    if (match) {
+        hint.className = 'status-alert success';
+        hint.innerText = `Сумма корзины корректна! Активируется ячеек на Сайте 2: ${match.cells}.`;
+        payBtn.disabled = false;
+    } else {
+        let target = ranges.find(r => r.min > totalM);
+        if (!target) target = ranges[ranges.length - 1];
+
+        const needMore = target.min - totalM;
+        hint.className = 'status-alert warning';
+        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        payBtn.disabled = true;
     }
 }
 
-// Поиск кнопки для инициализации покупки
-const regBtn = document.querySelector('button') || buyBtn;
+// 6. Оплата заказа
+async function processPayment() {
+    const totalM = cart.reduce((sum, item) => sum + item.priceM, 0);
+    const payBtn = document.getElementById('payBtn');
+    const hint = document.getElementById('cartHint');
 
-if (regBtn) {
-    // Инициализируем проверку состояния кнопки при открытии
-    updateBuyButtonState();
+    if (payBtn) payBtn.disabled = true;
+    if (hint) {
+        hint.className = 'status-alert warning';
+        hint.innerText = 'Обработка платежа и создание заказа...';
+    }
 
-    regBtn.addEventListener('click', async () => {
-        const usernameInput = document.getElementById('buyerName') || document.querySelector('input[type="text"]');
-        const sponsorInput = document.getElementById('buyerSponsor');
-        
-        const username = usernameInput ? usernameInput.value.trim() : '';
-        const sponsor = sponsorInput ? sponsorInput.value.trim() : '';
+    try {
+        const res = await fetch(`${API_URL}/shop/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                totalMitrons: totalM,
+                cartItems: cart
+            })
+        });
 
-        if (!username) {
-            alert('Введите логин покупателя!');
-            return;
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            alert(`Покупка успешно совершена! Создано ячеек на Сайте 2: ${data.cellsCount || 1}`);
+            cart = [];
+            updateCartUI();
+            toggleCart(false);
+        } else {
+            throw new Error(data.error || 'Ошибка при проведении оплаты');
         }
-
-        const validation = validateCartUI(currentCartTotal);
-        if (!validation.valid) {
-            alert(validation.message);
-            return;
+    } catch (err) {
+        if (hint) {
+            hint.className = 'status-alert error';
+            hint.innerText = `Ошибка: ${err.message}`;
         }
-
-        regBtn.disabled = true;
-        
-        let statusBox = document.querySelector('.status-box');
-        if (statusBox) {
-            statusBox.style.backgroundColor = '#e8f8f5';
-            statusBox.style.color = '#117a65';
-            statusBox.innerText = `Обработка покупки для ${username}...`;
-        }
-
-        try {
-            const checkoutRes = await fetch(`${API_URL}/shop/checkout`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    username: username, 
-                    totalMitrons: currentCartTotal,
-                    uplineUser: sponsor || null,
-                    cartItems: cartItems
-                })
-            });
-            const checkoutData = await checkoutRes.json();
-
-            if (!checkoutRes.ok || !checkoutData.success) {
-                throw new Error(checkoutData.error || 'Ошибка при проведении покупки');
-            }
-
-            if (statusBox) {
-                statusBox.style.backgroundColor = '#d4efdf';
-                statusBox.style.color = '#196f3d';
-                statusBox.innerText = `✓ Покупка успешна! Место на Сайте 2: ${checkoutData.cellId} (ячеек: ${checkoutData.cellsCount})`;
-            }
-
-            log(`Успешная покупка: ${username} на ${currentCartTotal} M`);
-
-        } catch (err) {
-            if (statusBox) {
-                statusBox.style.backgroundColor = '#fadbd8';
-                statusBox.style.color = '#78281f';
-                statusBox.innerText = `Ошибка: ${err.message}`;
-            }
-        } finally {
-            updateBuyButtonState();
-        }
-    });
+        if (payBtn) payBtn.disabled = false;
+    }
 }
+
+// Вспомогательное открытие/закрытие корзины
+function toggleCart(open) {
+    const drawer = document.getElementById('cartDrawer');
+    if (drawer) drawer.classList.toggle('open', open);
+}
+
+function toggleModal(open) {
+    const modal = document.getElementById('modalOverlay');
+    if (modal) modal.classList.toggle('open', open);
+}
+
+// Старт инициализации
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    updateCartUI();
+});
