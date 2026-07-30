@@ -15,8 +15,11 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Абсолютный путь к папке frontend для защиты от ошибок путей на Render
+const frontendPath = path.resolve(__dirname, '../../frontend');
+
 // Разделы и статика
-app.use(express.static(path.join(__dirname, '../../frontend')));
+app.use(express.static(frontendPath));
 
 let isRobotRunning = false;
 let robotTimeout = null;
@@ -88,7 +91,7 @@ function stopRobot() {
 
 // Корень сайта
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../frontend/index.html'));
+    res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // API Каталога товаров
