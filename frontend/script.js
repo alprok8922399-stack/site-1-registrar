@@ -1,5 +1,5 @@
 /**
- * Единый скрипт Витрины, Корзины и Управления Роботом (Сайт 1)
+ * Единый скрипт Витрины, Корзины, Регистрации и Управления Роботом (Сайт 1)
  * Проект: MITRON
  */
 
@@ -7,6 +7,7 @@ const API_URL = ''; // Относительные запросы
 
 let cart = [];
 let logInterval = null;
+let currentUser = localStorage.getItem('mitron_user') || null;
 
 // ==========================================
 // 1. ВИТРИНА И КАТАЛОГ ТОВАРОВ
@@ -79,7 +80,79 @@ function updateCartUI() {
 }
 
 // ==========================================
-// 2. МОДАЛЬНОЕ ОКНО КОРЗИНЫ
+// 2. МОДАЛЬНОЕ ОКНО РЕГИСТРАЦИИ
+// ==========================================
+
+window.openRegisterModal = function() {
+    let modal = document.getElementById('registerModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'registerModal';
+        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding:15px;';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div style="background:#ffffff; color:#1e293b; width:100%; max-width:400px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
+                <h3 style="margin:0; font-size:1.2rem;">👤 Регистрация / Вход</h3>
+                <button onclick="document.getElementById('registerModal').style.display='none'" style="background:none; border:none; color:#64748b; font-size:1.5rem; cursor:pointer;">&times;</button>
+            </div>
+            ${currentUser ? `
+                <div style="text-align:center; padding:10px 0;">
+                    <p>Вы вошли как: <b>${currentUser}</b></p>
+                    <button onclick="logoutUser()" style="width:100%; padding:10px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Сменить аккаунт</button>
+                </div>
+            ` : `
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:0.85rem; color:#64748b; display:block; margin-bottom:4px;">Придумайте ваш Логин:</label>
+                    <input type="text" id="regUsername" placeholder="Например: alex_2026" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                </div>
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:0.85rem; color:#64748b; display:block; margin-bottom:4px;">Спонсор (кто пригласил):</label>
+                    <input type="text" id="regSponsor" placeholder="root (по умолчанию)" value="root" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                </div>
+                <button onclick="registerUser()" style="width:100%; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:pointer;">ЗАРЕГИСТРИРОВАТЬСЯ</button>
+            `}
+        </div>
+    `;
+    modal.style.display = 'flex';
+};
+
+window.registerUser = function() {
+    const usernameInput = document.getElementById('regUsername');
+    const username = usernameInput ? usernameInput.value.trim() : '';
+
+    if (!username) {
+        alert("Введите логин для регистрации!");
+        return;
+    }
+
+    currentUser = username;
+    localStorage.setItem('mitron_user', username);
+    alert(`Отлично! Вы зарегистрированы как "${username}".Теперь можете оформлять покупки.`);
+    
+    document.getElementById('registerModal').style.display = 'none';
+    updateAuthUI();
+};
+
+window.logoutUser = function() {
+    currentUser = null;
+    localStorage.removeItem('mitron_user');
+    alert("Вы вышли из системы.");
+    document.getElementById('registerModal').style.display = 'none';
+    updateAuthUI();
+};
+
+function updateAuthUI() {
+    const regBtn = document.getElementById('authNavBtn');
+    if (regBtn) {
+        regBtn.textContent = currentUser ? `👤 ${currentUser}` : `👤 Вход`;
+    }
+}
+
+// ==========================================
+// 3. МОДАЛЬНОЕ ОКНО КОРЗИНЫ
 // ==========================================
 
 window.openCartModal = function() {
@@ -92,7 +165,8 @@ window.openCartModal = function() {
     }
     
     const total = cart.reduce((sum, item) => sum + item.price, 0);
-    
+    const savedUser = currentUser || '';
+
     modal.innerHTML = `
         <div style="background:#ffffff; color:#1e293b; width:100%; max-width:480px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
@@ -110,7 +184,10 @@ window.openCartModal = function() {
             <div style="font-size:1.2rem; font-weight:bold; margin-bottom:15px; text-align:right;">
                 Итого: <span style="color:#10b981;">${total} M</span>
             </div>
-            <input type="text" id="buyerUsername" placeholder="Введите ваш логин" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:15px; box-sizing:border-box;">
+            <div style="margin-bottom:15px;">
+                <label style="font-size:0.8rem; color:#64748b; display:block; margin-bottom:4px;">Логин покупателя:</label>
+                <input type="text" id="buyerUsername" value="${savedUser}" placeholder="Введите логин или зарегистрируйтесь" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+            </div>
             <button onclick="checkoutCart()" style="width:100%; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:pointer;">ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ</button>
         </div>
     `;
@@ -131,6 +208,10 @@ window.checkoutCart = async function() {
         return;
     }
 
+    // Сохраняем логин для следующих покупок
+    currentUser = username;
+    localStorage.setItem('mitron_user', username);
+
     const totalMitrons = cart.reduce((sum, item) => sum + item.price, 0);
 
     try {
@@ -142,7 +223,7 @@ window.checkoutCart = async function() {
 
         const data = await res.json();
         if (data.success) {
-            alert(`Успешно! Покупка оформлена. Вы зарезервировали ${data.cellsCount || 1} яч. в матрице Сайта 2.`);
+            alert(`Успешно! Покупка оформлена на логин "${username}". Вы зарезервировали ${data.cellsCount || 1} яч. в матрице Сайта 2.`);
             cart = [];
             updateCartUI();
             document.getElementById('cartModal').style.display = 'none';
@@ -155,7 +236,7 @@ window.checkoutCart = async function() {
 };
 
 // ==========================================
-// 3. УПРАВЛЕНИЕ ГЕНЕРАТОРОМ РОБОТОВ
+// 4. УПРАВЛЕНИЕ ГЕНЕРАТОРОМ РОБОТОВ
 // ==========================================
 
 function appendToConsole(text, isError = false) {
@@ -220,7 +301,6 @@ function updateRobotUI(isActive) {
     }
 }
 
-// Прямой вызов переключения состояния робота
 window.toggleRobotState = function() {
     const actionBtn = document.getElementById('actionBtn');
     if (!actionBtn) return;
@@ -290,13 +370,28 @@ function checkRobotStatus() {
 }
 
 // ==========================================
-// 4. ИНИЦИАЛИЗАЦИЯ И ПРИВЯЗКА КНОПОК
+// 5. ИНИЦИАЛИЗАЦИЯ И ДОБАВЛЕНИЕ КНОПКИ В ШАПКУ
 // ==========================================
+
+function ensureAuthButtonInHeader() {
+    const nav = document.querySelector('header nav, header, div[style*="background"]');
+    if (nav && !document.getElementById('authNavBtn')) {
+        const btn = document.createElement('button');
+        btn.id = 'authNavBtn';
+        btn.textContent = currentUser ? `👤 ${currentUser}` : `👤 Вход`;
+        btn.style.cssText = 'background: #6366f1; color: white; border: none; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.85rem; margin-right: 8px;';
+        btn.onclick = () => window.openRegisterModal();
+        
+        // Вставляем перед кнопкой Робота или в начало
+        nav.insertBefore(btn, nav.firstChild);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
+    ensureAuthButtonInHeader();
 
-    // Перехват кликов по ВСЕМ кнопкам в шапке
+    // Перехват кликов по кнопкам
     document.addEventListener('click', (e) => {
         const target = e.target.closest('button, a, div');
         if (!target) return;
