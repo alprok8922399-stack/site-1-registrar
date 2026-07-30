@@ -1,7 +1,7 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление корзиной, подсчет диапазонов (-10 M) и блокировка кнопки покупки.
+ * Управление корзиной, подсчет диапазонов (-10 M) и динамическая кнопка покупки.
  */
 
 const API_URL = '/api';
@@ -34,7 +34,8 @@ function validateCartUI(totalMitrons) {
             valid: false, 
             message: 'Корзина пуста. Добавьте товары.', 
             needed: 1000, 
-            targetBracket: 1000 
+            targetBracket: 1000,
+            cellsCount: 0
         };
     }
     
@@ -43,15 +44,16 @@ function validateCartUI(totalMitrons) {
             valid: false, 
             message: 'Максимальный объем одной покупки — 5000 Митронов', 
             needed: 0, 
-            targetBracket: 5000 
+            targetBracket: 5000,
+            cellsCount: 5
         };
     }
 
     const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
     const minAllowed = targetBracket - 10; // 990, 1990, 2990, 3990, 4990 M
+    const cellsCount = targetBracket / 1000;
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
-        const cellsCount = targetBracket / 1000;
         return { 
             valid: true, 
             cellsCount: cellsCount, 
@@ -63,7 +65,8 @@ function validateCartUI(totalMitrons) {
             valid: false, 
             message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
             needed: needed > 0 ? needed : 0,
-            targetBracket: targetBracket
+            targetBracket: targetBracket,
+            cellsCount: cellsCount
         };
     }
 }
@@ -93,6 +96,7 @@ function updateBuyButtonState() {
         regBtn.disabled = true;
         regBtn.style.opacity = '0.5';
         regBtn.style.cursor = 'not-allowed';
+        regBtn.innerText = `Купить (${currentCartTotal} M)`;
 
         statusBox.style.backgroundColor = '#fadbd8';
         statusBox.style.color = '#78281f';
@@ -101,6 +105,10 @@ function updateBuyButtonState() {
         regBtn.disabled = false;
         regBtn.style.opacity = '1';
         regBtn.style.cursor = 'pointer';
+        
+        // Динамический текст кнопки на 1-5 сертификатов
+        const certWord = validation.cellsCount === 1 ? 'сертификат' : (validation.cellsCount >= 5 ? 'сертификатов' : 'сертификата');
+        regBtn.innerText = `Купить ${validation.cellsCount} ${certWord} на ${validation.targetBracket} M`;
 
         statusBox.style.backgroundColor = '#e8f8f5';
         statusBox.style.color = '#117a65';
@@ -177,4 +185,4 @@ if (regBtn) {
             updateBuyButtonState();
         }
     });
-                    }
+}
