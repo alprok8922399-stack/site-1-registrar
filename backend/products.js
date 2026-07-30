@@ -9,7 +9,7 @@
 const MIN_COEFFICIENT = 2.2;
 const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
 
-// Базовый каталог товаров с возможностью динамического парсинга с внешних площадок
+// Базовый каталог товаров
 const initialProducts = [
     {
         id: 1,
@@ -17,7 +17,7 @@ const initialProducts = [
         category: "Сертификаты",
         costUsdt: 130, 
         ceilingPriceUsdt: 130, // Чистый сертификат ровно 1000 M
-        isCeilingApplied: false,
+        isCertificate: true,   // Флаг строгого номинала 1000 M без коэффициентов
         image: "https://via.placeholder.com/300x200?text=Certificate+1000"
     },
     {
@@ -26,7 +26,7 @@ const initialProducts = [
         category: "Электроника",
         costUsdt: 65, 
         ceilingPriceUsdt: 160, // Потолок цен по рынку (разрыв >= 2.2)
-        isCeilingApplied: true,
+        isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
     {
@@ -35,17 +35,23 @@ const initialProducts = [
         category: "Одежда",
         costUsdt: 32.5, 
         ceilingPriceUsdt: 85, // Потолок цен по рынку (разрыв >= 2.2)
-        isCeilingApplied: true,
+        isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
     }
 ];
 
 /**
- * Расчет розничной цены в Митронах по правилу x2.2 и Потолка цен:
- * 1. Вычисляется средний минимальный порог = себестоимость * 2.2
- * 2. Если Потолок цен превышает этот порог, подтягивается к Потолку цен.
+ * Расчет розничной цены в Митронах по правилу x2.2 и Потолка цен
  */
 function calculateRetailPriceMitrons(product) {
+    if (product.isCertificate) {
+        return {
+            priceMitrons: 1000,
+            finalUsdt: 130,
+            hasCeilingGap: false
+        };
+    }
+
     const minPriceUsdt = product.costUsdt * MIN_COEFFICIENT;
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
     const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
@@ -66,8 +72,15 @@ function calculateRetailPriceMitrons(product) {
 function getProductsCatalog() {
     return initialProducts.map(product => {
         const priceData = calculateRetailPriceMitrons(product);
-        const effectiveCoeff = (priceData.priceMitrons / (product.costUsdt * MITRON_PER_USDT)).toFixed(2);
         
+        let effectiveCoeff = 1.0;
+        let description = `Номинал: 1000 M | Стоимость: 130 USDT`;
+
+        if (!product.isCertificate) {
+            effectiveCoeff = (priceData.priceMitrons / (product.costUsdt * MITRON_PER_USDT)).toFixed(2);
+            description = `Себестоимость: ${product.costUsdt} USDT | Наценка: x${effectiveCoeff} | Итого: ${priceData.priceMitrons} M`;
+        }
+
         const displayTitle = priceData.hasCeilingGap ? `${product.title} *` : product.title;
 
         return {
@@ -76,7 +89,7 @@ function getProductsCatalog() {
             priceMitrons: priceData.priceMitrons,
             coefficient: effectiveCoeff,
             hasStarMark: priceData.hasCeilingGap,
-            description: `Себестоимость: ${product.costUsdt} USDT | Наценка: x${effectiveCoeff} | Итого: ${priceData.priceMitrons} M`
+            description: description
         };
     });
 }
@@ -86,7 +99,6 @@ function getProductsCatalog() {
  */
 function suggestAddonProducts(neededMitrons) {
     const catalog = getProductsCatalog();
-    // Ищем товары, близкие по стоимости к недостающей сумме
     return catalog.filter(p => p.priceMitrons <= neededMitrons + 50);
 }
 
