@@ -189,6 +189,12 @@ app.post('/api/shop/validate-cart', (req, res) => {
     res.json(validation);
 });
 
+app.post('/api/cart/validate', (req, res) => {
+    const { totalMitrons } = req.body || {};
+    const validation = validateCartTotal(Number(totalMitrons) || 0);
+    res.json(validation);
+});
+
 // API Мультипокупки и передачи ячеек на Сайт 2
 app.post('/api/shop/checkout', async (req, res) => {
     const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
@@ -242,18 +248,33 @@ app.get('/api/robot/logs', (req, res) => {
 });
 
 app.get('/api/robot/status', (req, res) => {
-    res.json({ running: isRobotRunning });
+    res.json({ active: isRobotRunning, running: isRobotRunning, logs: liveLogs });
+});
+
+app.get('/api/test-bot/status', (req, res) => {
+    res.json({ active: isRobotRunning, running: isRobotRunning, logs: liveLogs });
 });
 
 app.post('/api/robot/start', (req, res) => {
     const { batchSize } = req.body || {};
     startRobot(batchSize);
-    res.json({ success: true, running: true });
+    res.json({ success: true, running: true, active: true });
+});
+
+app.post('/api/test-bot/start', (req, res) => {
+    const { batchSize } = req.body || {};
+    startRobot(batchSize);
+    res.json({ success: true, running: true, active: true });
 });
 
 app.post('/api/robot/stop', (req, res) => {
     stopRobot();
-    res.json({ success: true, running: false });
+    res.json({ success: true, running: false, active: false });
+});
+
+app.post('/api/test-bot/stop', (req, res) => {
+    stopRobot();
+    res.json({ success: true, running: false, active: false });
 });
 
 app.listen(PORT, () => console.log(`Site 1 Bridge Server running on port ${PORT}`));
