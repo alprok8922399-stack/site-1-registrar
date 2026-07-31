@@ -9,15 +9,15 @@
 const MIN_COEFFICIENT = 2.2;
 const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
 
-// Базовый каталог товаров
+// Базовый каталог товаров (Расширенный список)
 const initialProducts = [
     {
         id: 1,
         title: "Сертификат MITRON 1000",
         category: "Сертификаты",
         costUsdt: 130, 
-        ceilingPriceUsdt: 130, // Чистый сертификат ровно 1000 M
-        isCertificate: true,   // Флаг строгого номинала 1000 M без коэффициентов
+        ceilingPriceUsdt: 130,
+        isCertificate: true,
         image: "https://via.placeholder.com/300x200?text=Certificate+1000"
     },
     {
@@ -25,7 +25,7 @@ const initialProducts = [
         title: "Смарт-часы MITRON Watch Pro",
         category: "Электроника",
         costUsdt: 65, 
-        ceilingPriceUsdt: 160, // Потолок цен по рынку (разрыв >= 2.2)
+        ceilingPriceUsdt: 160,
         isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
@@ -34,9 +34,54 @@ const initialProducts = [
         title: "Фирменное худи MITRON DAO",
         category: "Одежда",
         costUsdt: 32.5, 
-        ceilingPriceUsdt: 85, // Потолок цен по рынку (разрыв >= 2.2)
+        ceilingPriceUsdt: 85,
         isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
+    },
+    {
+        id: 4,
+        title: "Беспроводные наушники MITRON Sound",
+        category: "Электроника",
+        costUsdt: 25, 
+        ceilingPriceUsdt: 65,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Sound"
+    },
+    {
+        id: 5,
+        title: "Кожаный портмоне MITRON Leather",
+        category: "Аксессуары",
+        costUsdt: 15, 
+        ceilingPriceUsdt: 45,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Wallet"
+    },
+    {
+        id: 6,
+        title: "Умная бутылка для воды MITRON Hydro",
+        category: "Спорт",
+        costUsdt: 18, 
+        ceilingPriceUsdt: 42,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Bottle"
+    },
+    {
+        id: 7,
+        title: "Фирменная кепка MITRON Cap",
+        category: "Одежда",
+        costUsdt: 10, 
+        ceilingPriceUsdt: 28,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Cap"
+    },
+    {
+        id: 8,
+        title: "Портативный PowerBank 20000 mAh",
+        category: "Электроника",
+        costUsdt: 22, 
+        ceilingPriceUsdt: 58,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+PowerBank"
     }
 ];
 
@@ -56,7 +101,7 @@ function calculateRetailPriceMitrons(product) {
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
     const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
     
-    // Пометка '*', если цена установлена по Потолку (соотношение Ceiling / Cost >= 2.2)
+    // Пометка '*', если цена установлена по Потолку
     const hasCeilingGap = (product.ceilingPriceUsdt / product.costUsdt) >= MIN_COEFFICIENT;
 
     return {
@@ -124,9 +169,8 @@ function validateCartTotal(totalMitrons) {
         };
     }
 
-    // Определяем целевой диапазон (1000, 2000, 3000, 4000 или 5000)
     const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
-    const minAllowed = targetBracket - 10; // Допуск в минус 10 Митронов (например, 2990 M)
+    const minAllowed = targetBracket - 10;
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
         const cellsCount = targetBracket / 1000;
