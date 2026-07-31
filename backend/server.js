@@ -143,6 +143,16 @@ app.post('/api/shop/register', async (req, res) => {
     });
 });
 
+// Получение списка заказов пользователя
+app.get('/api/shop/orders', (req, res) => {
+    const username = (req.query.username || '').trim();
+    if (!username) {
+        return res.status(400).json({ success: false, error: 'Укажите логин' });
+    }
+    const orders = userOrdersStore[username] || [];
+    res.json({ success: true, orders });
+});
+
 // Проверка накопительного лимита пользователя
 app.get('/api/shop/user-purchases/:username', (req, res) => {
     const cleanUser = (req.params.username || '').trim();
@@ -209,8 +219,9 @@ app.post('/api/shop/pay', async (req, res) => {
         if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
         userOrdersStore[cleanUser].push({
             id: Date.now(),
-            amount: validation.totalMitrons,
-            date: new Date().toISOString()
+            totalMitrons: validation.totalMitrons,
+            status: 'PAID',
+            createdAt: new Date().toISOString()
         });
 
         // Передаем точную сумму покупки для корректного расчета финансов Админа
@@ -288,12 +299,15 @@ app.post('/api/shop/checkout', async (req, res) => {
             // Увеличиваем накопленный объем покупок
             userPurchasesTotal[cleanUser] = currentSpent + validation.totalMitrons;
             if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
-            userOrdersStore[cleanUser].push({
+            
+            const newOrder = {
                 id: Date.now(),
-                amount: validation.totalMitrons,
+                totalMitrons: validation.totalMitrons,
                 items: cartItems || [],
-                date: new Date().toISOString()
-            });
+                status: 'PAID',
+                createdAt: new Date().toISOString()
+            };
+            userOrdersStore[cleanUser].push(newOrder);
 
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
@@ -302,6 +316,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             
             return res.json({ 
                 success: true, 
+                order: newOrder,
                 finance: financeData,
                 accumulatedTotal: userPurchasesTotal[cleanUser],
                 message: "Заказ успешно оплачен и оформлен!" 
@@ -314,9 +329,9 @@ app.post('/api/shop/checkout', async (req, res) => {
     }
 });
 
-// Регистрация отказа от покупки
-app.post('/api/shop/refund', (req, res) => {
-    const { username, amount } = req.body || {};
+// Регистрация отказа от покупки и передача сигнала на Сайт 2
+app.post('/api/shop/refund', async (req, res) => {
+    const { username, orderId, amount } = req.body || {};
     if (!username) {
         return res.status(400).json({ success: false, error: "Укажите логин" });
     }
@@ -325,6 +340,27 @@ app.post('/api/shop/refund', (req, res) => {
 
     logRefund(cleanUser, refundAmount);
 
+    // Передаем команду отмены на Сайт 2 (передача ячеек Администрации)
+    try {
+        await fetch(`${SITE2_URL}/api/admin/refund-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: cleanUser })
+        });
+    } catch (e) {
+        console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
+    }
+
+    // Обновляем статус заказа
+    if (userOrdersStore[cleanUser]) {
+        userOrdersStore[cleanUser] = userOrdersStore[cleanUser].map(o => {
+            if (String(o.id) === String(orderId) || !orderId) {
+                return { ...o, status: 'REFUNDED' };
+            }
+            return o;
+        });
+    }
+
     // Сбрасываем/уменьшаем накопленную сумму покупок при отказе
     if (userPurchasesTotal[cleanUser]) {
         userPurchasesTotal[cleanUser] = Math.max(0, userPurchasesTotal[cleanUser] - refundAmount);
@@ -332,7 +368,7 @@ app.post('/api/shop/refund', (req, res) => {
     
     res.json({ 
         success: true, 
-        message: "Отказ зафиксирован, средства возвращены",
+        message: "Отказ зафиксирован, средства возвращены, ячейка перешла Администрации.",
         accumulatedTotal: userPurchasesTotal[cleanUser] || 0
     });
 });
