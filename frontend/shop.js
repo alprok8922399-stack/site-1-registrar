@@ -1,7 +1,7 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление витриной, корзиной, валидация диапазонов (-10 M) и работа с Роботом.
+ * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок и работа с Роботом.
  */
 
 const API_URL = '/api';
@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
     checkAuthStatus();
     loadRefundStats();
+    loadUserOrders();
 });
 
 // Загрузка статистики по отказам (включая за 24 часа)
@@ -191,7 +192,7 @@ async function processPayment() {
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
 
-    const username = userInput ? userInput.value.trim() : 'Покупатель';
+    const username = userInput ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
 
     if (!username) {
         if (hint) {
@@ -227,6 +228,7 @@ async function processPayment() {
             }
             cart = [];
             updateCartUI();
+            loadUserOrders();
             setTimeout(() => toggleCart(false), 2000);
         } else {
             throw new Error(data.error || 'Ошибка при проведении оплаты');
@@ -240,7 +242,86 @@ async function processPayment() {
     }
 }
 
-// 7. Вход и Окна
+// 7. Управление заказами пользователя и КНОПКА ОТКАЗА
+async function loadUserOrders() {
+    const ordersContainer = document.getElementById('userOrdersContainer');
+    if (!ordersContainer) return;
+
+    const username = localStorage.getItem('mitron_user');
+    if (!username) {
+        ordersContainer.innerHTML = '<p style="color:#888;">Войдите в систему, чтобы просмотреть свои заказы.</p>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/shop/orders?username=${encodeURIComponent(username)}`);
+        if (!res.ok) throw new Error('Не удалось загрузить заказы');
+
+        const data = await res.json();
+        if (data.success && data.orders && data.orders.length > 0) {
+            ordersContainer.innerHTML = data.orders.map(order => {
+                const createdDate = new Date(order.createdAt || Date.now());
+                const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+
+                return `
+                    <div style="background:#f9f9f9; border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <strong>Заказ #${order.id || order._id || '1'}</strong>
+                            <span style="font-size:12px; color:${order.status === 'REFUNDED' ? 'red' : 'green'}; font-weight:bold;">
+                                ${order.status === 'REFUNDED' ? 'Возвращен' : 'Оплачен'} (${diffDays} дн.)
+                            </span>
+                        </div>
+                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons} M</strong></div>
+                        ${canRefund ? `
+                            <button 
+                                onclick="refundOrder('${order.id || order._id}')" 
+                                style="width:100%; padding:8px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">
+                                🚫 Отказаться от покупки
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        } else {
+            ordersContainer.innerHTML = '<p style="color:#888;">У вас пока нет активных заказов.</p>';
+        }
+    } catch (e) {
+        console.error('Ошибка загрузки заказов:', e);
+        ordersContainer.innerHTML = '<p style="color:#888;">Ошибка загрузки списка заказов.</p>';
+    }
+}
+
+async function refundOrder(orderId) {
+    const username = localStorage.getItem('mitron_user');
+    if (!username) return alert('Вы не авторизованы');
+
+    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а аккаунт аннулирован.')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/shop/refund`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, orderId })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert('Отказ оформлен! Средства полностью возвращены.');
+            loadUserOrders();
+            loadRefundStats();
+        } else {
+            alert(`Ошибка отказа: ${data.error || 'Неизвестная ошибка'}`);
+        }
+    } catch (err) {
+        console.error('Ошибка при отмене заказа:', err);
+        alert('Не удалось связаться с сервером');
+    }
+}
+
+// 8. Вход и Окна
 function checkAuthStatus() {
     const user = localStorage.getItem('mitron_user');
     const authBtn = document.getElementById('authBtn');
@@ -259,6 +340,7 @@ function handleAuthClick() {
     if (username) {
         localStorage.setItem('mitron_user', username.trim());
         checkAuthStatus();
+        loadUserOrders();
     }
 }
 
@@ -275,7 +357,7 @@ function toggleModal(open) {
     }
 }
 
-// 8. Связь с Генератором Робота
+// 9. Связь с Генератором Робота
 async function fetchBotStatus() {
     const statusLabel = document.getElementById('statusLabel');
     const actionBtn = document.getElementById('actionBtn');
@@ -314,3 +396,7 @@ async function toggleBot(enable) {
         console.error('Ошибка переключения генератора:', err);
     }
 }
+
+// Глобальные мосты для обработчиков событий
+window.refundOrder = refundOrder;
+window.handleAuthClick = handleAuthClick;
