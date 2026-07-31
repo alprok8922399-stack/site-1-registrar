@@ -33,6 +33,7 @@
             transition: all 0.2s;
             -webkit-tap-highlight-color: transparent;
         }
+        .btn-auth { background: #4a5568; color: #fff; }
         .btn-bot { background: #3d5af1; color: #fff; }
         .btn-cart { background: #00e676; color: #1a1f2c; position: relative; }
         .cart-badge {
@@ -110,6 +111,7 @@
     <header>
         <div class="logo">MITRON</div>
         <div class="nav-actions">
+            <button class="btn btn-auth" id="authBtn" onclick="handleAuthClick()">👤 Вход</button>
             <button class="btn btn-bot" onclick="toggleModal(true)">🤖 Робот</button>
             <button class="btn btn-cart" onclick="toggleCart(true)">
                 🛒 Корзина <span class="cart-badge" id="cartBadge">0</span>
@@ -120,7 +122,7 @@
     <div class="container">
         <h2 class="catalog-title">Витрина товаров</h2>
         <div class="grid" id="productGrid">
-            </div>
+        </div>
     </div>
 
     <div class="cart-drawer" id="cartDrawer">
