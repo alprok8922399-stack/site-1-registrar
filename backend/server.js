@@ -9,6 +9,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 const { getProductsCatalog, validateCartTotal } = require('./products');
+const { calculatePurchaseFinance, logRefund, getRefundStats } = require('./finance');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -73,7 +74,7 @@ async function registerBatch(requestedBatchSize) {
             if (data.success) {
                 logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId || 'активирован'}`);
             } else {
-                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец матрицы'}`);
+                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец структуры'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
@@ -136,7 +137,7 @@ app.post('/api/shop/register', async (req, res) => {
     });
 });
 
-// Оплата и активация ячейки
+// Оплата и покупка
 app.post('/api/shop/pay', async (req, res) => {
     const { username, amountMitrons, uplineUser } = req.body || {};
     if (!username || !username.trim()) {
@@ -171,14 +172,16 @@ app.post('/api/shop/pay', async (req, res) => {
             return res.status(400).json({ success: false, error: site2Data.error });
         }
 
+        const financeData = calculatePurchaseFinance(username.trim(), uplineUser);
+
         return res.json({ 
             success: true, 
-            cellId: site2Data.cellId || 'A1',
-            cellsCount: validation.cellsCount,
-            shopUserStatus: { balance: 0 }
+            finance: financeData,
+            shopUserStatus: { balance: 0 },
+            message: 'Оплата прошла успешно! Ваш заказ оформлен.'
         });
     } catch (err) {
-        return res.status(500).json({ success: false, error: `Ошибка связи с Сайтом 2: ${err.message}` });
+        return res.status(500).json({ success: false, error: `Ошибка при обработке заказа: ${err.message}` });
     }
 });
 
@@ -195,7 +198,7 @@ app.post('/api/cart/validate', (req, res) => {
     res.json(validation);
 });
 
-// API Мультипокупки и передачи ячеек на Сайт 2
+// API Мультипокупки
 app.post('/api/shop/checkout', async (req, res) => {
     const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
     
@@ -227,19 +230,34 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            logEvent(`Покупатель ${username.trim()} совершил покупку на ${validation.totalMitrons} M и занял ${validation.cellsCount} яч. на Сайте 2`);
+            logEvent(`Покупатель ${username.trim()} совершил покупку на ${validation.totalMitrons} M`);
+            const financeData = calculatePurchaseFinance(username.trim(), uplineUser);
             return res.json({ 
                 success: true, 
-                cellsCount: validation.cellsCount,
-                cellId: site2Data.cellId,
-                message: `Оплата успешна! Вы зарезервировали ${validation.cellsCount} яч. в матрице.` 
+                finance: financeData,
+                message: "Заказ успешно оплачен и оформлен!" 
             });
         } else {
-            return res.status(500).json({ success: false, error: site2Data.error || "Ошибка при регистрации в матрице" });
+            return res.status(500).json({ success: false, error: site2Data.error || "Ошибка при оформлении заказа" });
         }
     } catch (err) {
-        return res.status(500).json({ success: false, error: `Ошибка связи с Сайтом 2: ${err.message}` });
+        return res.status(500).json({ success: false, error: `Ошибка при проведении покупки: ${err.message}` });
     }
+});
+
+// Регистрация отказа от покупки
+app.post('/api/shop/refund', (req, res) => {
+    const { username, amount } = req.body || {};
+    if (!username) {
+        return res.status(400).json({ success: false, error: "Укажите логин" });
+    }
+    logRefund(username, amount || 1000);
+    res.json({ success: true, message: "Отказ зафиксирован" });
+});
+
+// Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
+app.get('/api/shop/refund-stats', (req, res) => {
+    res.json({ success: true, stats: getRefundStats() });
 });
 
 // Панель робота
