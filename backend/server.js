@@ -17,6 +17,10 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Хранилище накопленных покупок по логинам (для соблюдения лимита макс 5000 M на логин)
+const userPurchasesTotal = {};
+const userOrdersStore = {};
+
 // Универсальное определение пути к папке frontend для Render
 function getFrontendPath() {
     const possiblePaths = [
@@ -130,10 +134,27 @@ app.post('/api/shop/register', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
+    const cleanUser = username.trim();
     return res.json({ 
         success: true, 
-        username: username.trim(),
+        username: cleanUser,
+        accumulatedMitrons: userPurchasesTotal[cleanUser] || 0,
         message: 'Регистрация успешна. Ожидайте оплаты товаров.' 
+    });
+});
+
+// Проверка накопительного лимита пользователя
+app.get('/api/shop/user-purchases/:username', (req, res) => {
+    const cleanUser = (req.params.username || '').trim();
+    const totalSpent = userPurchasesTotal[cleanUser] || 0;
+    const orders = userOrdersStore[cleanUser] || [];
+    res.json({
+        success: true,
+        username: cleanUser,
+        totalSpent: totalSpent,
+        remainingLimit: Math.max(0, 5000 - totalSpent),
+        canBuy: totalSpent < 5000,
+        orders: orders
     });
 });
 
@@ -144,6 +165,8 @@ app.post('/api/shop/pay', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
+    const cleanUser = username.trim();
+    const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const total = amountMitrons || 1000;
     const validation = validateCartTotal(Number(total) || 0);
 
@@ -155,12 +178,21 @@ app.post('/api/shop/pay', async (req, res) => {
         });
     }
 
+    // Жесткая проверка накопительного лимита в 5000 M
+    if (currentSpent + validation.totalMitrons > 5000) {
+        const available = Math.max(0, 5000 - currentSpent);
+        return res.status(400).json({
+            success: false,
+            error: `Превышен лимит! Вы уже приобрели на ${currentSpent} M. Ваша макс. доступная покупка: ${available} M (глобальный лимит 5000 M).`
+        });
+    }
+
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                username: username.trim(), 
+                username: cleanUser, 
                 cellsCount: validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
                 uplineUser: uplineUser || null
@@ -172,12 +204,23 @@ app.post('/api/shop/pay', async (req, res) => {
             return res.status(400).json({ success: false, error: site2Data.error });
         }
 
-        const financeData = calculatePurchaseFinance(username.trim(), uplineUser);
+        // Обновляем накопительный баланс пользователя
+        userPurchasesTotal[cleanUser] = currentSpent + validation.totalMitrons;
+        if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
+        userOrdersStore[cleanUser].push({
+            id: Date.now(),
+            amount: validation.totalMitrons,
+            date: new Date().toISOString()
+        });
+
+        // Передаем точную сумму покупки для корректного расчета финансов Админа
+        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
 
         return res.json({ 
             success: true, 
             finance: financeData,
             shopUserStatus: { balance: 0 },
+            accumulatedTotal: userPurchasesTotal[cleanUser],
             message: 'Оплата прошла успешно! Ваш заказ оформлен.'
         });
     } catch (err) {
@@ -206,7 +249,10 @@ app.post('/api/shop/checkout', async (req, res) => {
         return res.status(400).json({ success: false, error: "Укажите логин покупателя" });
     }
 
+    const cleanUser = username.trim();
+    const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const validation = validateCartTotal(Number(totalMitrons) || 0);
+
     if (!validation.valid) {
         return res.status(400).json({ 
             success: false, 
@@ -215,12 +261,21 @@ app.post('/api/shop/checkout', async (req, res) => {
         });
     }
 
+    // Жесткая проверка накопительного лимита в 5000 M
+    if (currentSpent + validation.totalMitrons > 5000) {
+        const available = Math.max(0, 5000 - currentSpent);
+        return res.status(400).json({
+            success: false,
+            error: `Превышен лимит! Вы уже купили на ${currentSpent} M. Допустимая сумма покупки до 5000 M составляет: ${available} M.`
+        });
+    }
+
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                username: username.trim(),
+                username: cleanUser,
                 cellsCount: validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
@@ -230,11 +285,25 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            logEvent(`Покупатель ${username.trim()} совершил покупку на ${validation.totalMitrons} M`);
-            const financeData = calculatePurchaseFinance(username.trim(), uplineUser);
+            // Увеличиваем накопленный объем покупок
+            userPurchasesTotal[cleanUser] = currentSpent + validation.totalMitrons;
+            if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
+            userOrdersStore[cleanUser].push({
+                id: Date.now(),
+                amount: validation.totalMitrons,
+                items: cartItems || [],
+                date: new Date().toISOString()
+            });
+
+            logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
+            
+            // Расчет с учетом полной суммы заказа
+            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
+            
             return res.json({ 
                 success: true, 
                 finance: financeData,
+                accumulatedTotal: userPurchasesTotal[cleanUser],
                 message: "Заказ успешно оплачен и оформлен!" 
             });
         } else {
@@ -251,8 +320,21 @@ app.post('/api/shop/refund', (req, res) => {
     if (!username) {
         return res.status(400).json({ success: false, error: "Укажите логин" });
     }
-    logRefund(username, amount || 1000);
-    res.json({ success: true, message: "Отказ зафиксирован" });
+    const cleanUser = username.trim();
+    const refundAmount = amount || 1000;
+
+    logRefund(cleanUser, refundAmount);
+
+    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе
+    if (userPurchasesTotal[cleanUser]) {
+        userPurchasesTotal[cleanUser] = Math.max(0, userPurchasesTotal[cleanUser] - refundAmount);
+    }
+    
+    res.json({ 
+        success: true, 
+        message: "Отказ зафиксирован, средства возвращены",
+        accumulatedTotal: userPurchasesTotal[cleanUser] || 0
+    });
 });
 
 // Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
