@@ -9,7 +9,7 @@
         body { background-color: #f4f6f9; color: #333; padding-bottom: 50px; }
         
         /* Шапка */
-        header { background: #1e272e; color: #fff; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; sticky: top; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        header { background: #1e272e; color: #fff; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
         .logo { font-size: 20px; font-weight: bold; color: #00b894; letter-spacing: 1px; }
         .nav-btns { display: flex; gap: 10px; align-items: center; }
         
@@ -18,12 +18,18 @@
         .badge { background: #ff4757; color: white; border-radius: 50%; padding: 2px 6px; font-size: 11px; margin-left: 4px; }
 
         .container { max-width: 1000px; margin: 20px auto; padding: 0 15px; }
-        h2 { margin-bottom: 20px; font-size: 22px; color: #2c3e50; }
+        h2 { margin-bottom: 15px; font-size: 22px; color: #2c3e50; }
+
+        /* Панель статистики отказов */
+        .stats-bar { display: flex; gap: 15px; margin-bottom: 20px; background: #fff; padding: 12px 18px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .stat-item { flex: 1; display: flex; flex-direction: column; }
+        .stat-title { font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold; margin-bottom: 3px; }
+        .stat-value { font-size: 16px; font-weight: bold; color: #e74c3c; }
 
         /* Сетка товаров */
         .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
         
-        /* Выезжающая/Модальная корзина */
+        /* Выезжающая корзина */
         .cart-drawer { position: fixed; top: 0; right: -400px; width: 100%; max-width: 380px; height: 100%; background: #fff; box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 1000; transition: right 0.3s ease; padding: 20px; display: flex; flex-direction: column; }
         .cart-drawer.open { right: 0; }
         .cart-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px; }
@@ -61,8 +67,20 @@
 
     <div class="container">
         <h2>Витрина товаров</h2>
-        <div id="productGrid" class="product-grid">
+        
+        <div class="stats-bar">
+            <div class="stat-item">
+                <span class="stat-title">Отказалось от покупки СЕГОДНЯ</span>
+                <span id="stat-refused-today" class="stat-value">0 чел.</span>
             </div>
+            <div class="stat-item">
+                <span class="stat-title">Всего отказов (31 день)</span>
+                <span id="stat-refused-total" class="stat-value" style="color: #7f8c8d;">0 чел.</span>
+            </div>
+        </div>
+
+        <div id="productGrid" class="product-grid">
+        </div>
     </div>
 
     <div id="cartDrawer" class="cart-drawer">
@@ -72,7 +90,7 @@
         </div>
 
         <div id="cartItems" class="cart-items">
-            </div>
+        </div>
 
         <div class="cart-footer">
             <div class="cart-total">
@@ -82,17 +100,17 @@
 
             <div class="form-group">
                 <label for="usernameInput">Логин покупателя:</label>
-                <input type="text" id="usernameInput" value="Пупкин" placeholder="Введите ваш логин">
+                <input type="text" id="usernameInput" value="Покупатель" placeholder="Введите ваш логин">
             </div>
 
             <div id="cartHint" class="status-alert warning">
                 Добавьте товары в корзину для оформления заказа.
             </div>
 
-            <button id="payBtn" class="btn-pay" onclick="processPayment()" disabled>ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ</button>
+            <button id="payBtn" class="btn-pay" onclick="processPayment()" disabled>ОПЛАТИТЬ ЗАКАЗ</button>
         </div>
     </div>
 
     <script src="shop.js"></script>
 </body>
-</html>
+    </html>
