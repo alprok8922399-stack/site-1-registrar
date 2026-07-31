@@ -24,11 +24,16 @@ async function loadProducts() {
         if (res.ok) {
             catalog = await res.json();
         } else {
-            // Резервный список товаров
+            // Резервный расширенный список товаров
             catalog = [
-                { id: "cert-1000", title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
-                { id: "watch-pro", title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
-                { id: "hoodie-dao", title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" }
+                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
+                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
+                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" },
+                { id: 4, title: "Беспроводные наушники MITRON Sound *", priceMitrons: 500, description: "Себестоимость: 25 USDT | Наценка: x2.60 | Итого: 500 M" },
+                { id: 5, title: "Кожаный портмоне MITRON Leather *", priceMitrons: 346, description: "Себестоимость: 15 USDT | Наценка: x3.00 | Итого: 346 M" },
+                { id: 6, title: "Умная бутылка MITRON Hydro *", priceMitrons: 323, description: "Себестоимость: 18 USDT | Наценка: x2.33 | Итого: 323 M" },
+                { id: 7, title: "Фирменная кепка MITRON Cap *", priceMitrons: 215, description: "Себестоимость: 10 USDT | Наценка: x2.80 | Итого: 215 M" },
+                { id: 8, title: "Портативный PowerBank 20000 mAh *", priceMitrons: 446, description: "Себестоимость: 22 USDT | Наценка: x2.64 | Итого: 446 M" }
             ];
         }
 
@@ -222,6 +227,10 @@ function checkAuthStatus() {
     if (authBtn) {
         authBtn.innerText = user ? `👤 ${user}` : '👤 Вход';
     }
+    const input = document.getElementById('usernameInput');
+    if (input && user) {
+        input.value = user;
+    }
 }
 
 function handleAuthClick() {
@@ -229,8 +238,6 @@ function handleAuthClick() {
     const username = prompt('Введите ваш логин для входа:', current);
     if (username) {
         localStorage.setItem('mitron_user', username.trim());
-        const input = document.getElementById('usernameInput');
-        if (input) input.value = username.trim();
         checkAuthStatus();
     }
 }
@@ -286,4 +293,4 @@ async function toggleBot(enable) {
     } catch (err) {
         console.error('Ошибка переключения генератора:', err);
     }
-}
+    }
