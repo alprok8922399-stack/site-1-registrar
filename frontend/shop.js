@@ -12,7 +12,27 @@ let catalog = [];
 document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
     checkAuthStatus();
+    loadRefundStats();
 });
+
+// Загрузка статистики по отказам (включая за 24 часа)
+async function loadRefundStats() {
+    try {
+        const res = await fetch(`${API_URL}/shop/refund-stats`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.stats) {
+                const todayEl = document.getElementById('stat-refused-today');
+                const totalEl = document.getElementById('stat-refused-total');
+                
+                if (todayEl) todayEl.innerText = `${data.stats.refusedToday || 0} чел.`;
+                if (totalEl) totalEl.innerText = `${data.stats.totalRefused || 0} чел.`;
+            }
+        }
+    } catch (e) {
+        console.error('Ошибка загрузки статистики отказов:', e);
+    }
+}
 
 // 2. Отрисовка товаров на витрине
 async function loadProducts() {
@@ -138,20 +158,20 @@ function validateCartUI(totalM) {
         return;
     }
 
-    // Допустимые диапазоны для 1-5 ячеек (погрешность до -10 M)
+    // Допустимые диапазоны (погрешность до -10 M)
     const ranges = [
-        { min: 990, max: 1000, cells: 1 },
-        { min: 1990, max: 2000, cells: 2 },
-        { min: 2990, max: 3000, cells: 3 },
-        { min: 3990, max: 4000, cells: 4 },
-        { min: 4990, max: 5000, cells: 5 }
+        { min: 990, max: 1000 },
+        { min: 1990, max: 2000 },
+        { min: 2990, max: 3000 },
+        { min: 3990, max: 4000 },
+        { min: 4990, max: 5000 }
     ];
 
     const match = ranges.find(r => totalM >= r.min && totalM <= r.max);
 
     if (match) {
         hint.className = 'status-alert success';
-        hint.innerText = `Сумма корзины корректна! Активируется ячеек на Сайте 2: ${match.cells}.`;
+        hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
         payBtn.disabled = false;
     } else {
         let target = ranges.find(r => r.max >= totalM);
@@ -164,14 +184,14 @@ function validateCartUI(totalM) {
     }
 }
 
-// 6. Оплата заказа и передача на Сайт 2
+// 6. Оплата заказа
 async function processPayment() {
     const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
 
-    const username = userInput ? userInput.value.trim() : 'Пупкин';
+    const username = userInput ? userInput.value.trim() : 'Покупатель';
 
     if (!username) {
         if (hint) {
@@ -203,7 +223,7 @@ async function processPayment() {
         if (res.ok && data.success) {
             if (hint) {
                 hint.className = 'status-alert success';
-                hint.innerText = `Успешно! Создано ячеек на Сайте 2: ${data.cellsCount || 1}`;
+                hint.innerText = 'Оплата прошла успешно! Ваш заказ оформлен.';
             }
             cart = [];
             updateCartUI();
@@ -234,7 +254,7 @@ function checkAuthStatus() {
 }
 
 function handleAuthClick() {
-    const current = localStorage.getItem('mitron_user') || 'Пупкин';
+    const current = localStorage.getItem('mitron_user') || 'Покупатель';
     const username = prompt('Введите ваш логин для входа:', current);
     if (username) {
         localStorage.setItem('mitron_user', username.trim());
@@ -293,4 +313,4 @@ async function toggleBot(enable) {
     } catch (err) {
         console.error('Ошибка переключения генератора:', err);
     }
-    }
+}
