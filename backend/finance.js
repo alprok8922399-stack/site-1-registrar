@@ -7,33 +7,37 @@
 const refundLogs = [];
 
 /**
- * Расчет распределения средств при покупке на 1000 Митронов (1 ячейка):
- * - Максимальная стоимость товара на внешнем МП: 450 M
- * - Резерв Лидеру в Матрицу (1/4 от 1000 M): 250 M
- * - Реферальные вознаграждения (50 + 10 + 10 M): 70 M
+ * Расчет распределения средств при покупке (кратной 1000 Митронов):
+ * - Максимальная стоимость товара на внешнем МП: 450 M за каждые 1000 M
+ * - Резерв Лидеру в Матрицу: 250 M за каждые 1000 M
+ * - Реферальные вознаграждения: 70 M (50+10+10) за каждые 1000 M
  * -----------------------------------------------------
- * Базовый остаток: 1000 - (450 + 250 + 70) = 230 M
- * Фонд DAO (10% от базового остатка): 23 M
- * Чистая прибыль Администратора (90% от базового остатка): 207 M
+ * Базовый остаток = Входящая сумма - Обязательства
+ * Фонд DAO (10% от базового остатка)
+ * Чистая прибыль Администратора (90% от базового остатка)
  */
-function calculatePurchaseFinance(username, sponsor, actualGoodsCost = 450) {
-    const totalAmount = 1000;
+function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null) {
+    const totalAmount = Number(totalMitronsInput) || 1000;
+    const cellsCount = Math.max(1, Math.round(totalAmount / 1000));
+    
+    // Максимальная цена товара берется из расчета 450 M на каждую ячейку в 1000 M
+    const maxAllowedGoodsCost = 450 * cellsCount;
+    const goodsCost = actualGoodsCostInput !== null ? Math.min(actualGoodsCostInput, maxAllowedGoodsCost) : maxAllowedGoodsCost;
     
     // 1. Обязательства
-    const goodsCost = Math.min(actualGoodsCost, 450); // Не более 450 M
-    const leaderReserve = 250;                        // Резерв в Матрицу
-    const refReserveTotal = 70;                       // 50M (1 ур) + 10M (2 ур) + 10M (3 ур)
+    const leaderReserve = 250 * cellsCount;                     // Резерв в Матрицу
+    const refReserveTotal = 70 * cellsCount;                   // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) на каждую ячейку
     
     const totalObligations = goodsCost + leaderReserve + refReserveTotal;
     
     // 2. Расчет базового остатка
-    const baseRemainder = totalAmount - totalObligations; // При 450 M = 230 M
+    const baseRemainder = Math.max(0, totalAmount - totalObligations);
     
     // 3. Распределения из остатка
-    const daoFundShare = Math.round(baseRemainder * 0.10);  // 10% в DAO (23 M)
-    const adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу (207 M)
+    const daoFundShare = Math.round(baseRemainder * 0.10);  // 10% в DAO
+    const adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу
     
-    // В Выплатной кошелек уходит: 450 + 250 + 70 + 23 = 793 M
+    // В Выплатной кошелек уходит: Товары + Матрица + Реферальные + DAO
     const payoutWalletTotal = goodsCost + leaderReserve + refReserveTotal + daoFundShare;
 
     return {
@@ -41,15 +45,16 @@ function calculatePurchaseFinance(username, sponsor, actualGoodsCost = 450) {
         username: username,
         sponsor: sponsor || 'System',
         totalMitrons: totalAmount,
+        cellsCount: cellsCount,
         distribution: {
-            adminWalletMitrons: totalAmount, // Первично 100% (1000 M) заходит в Кошелек Админа
-            payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз (793 M)
+            adminWalletMitrons: totalAmount, // Первично 100% всей суммы заходит в Кошелек Админа
+            payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз
             logisticsMitrons: goodsCost,
             matrixLeaderReserve: leaderReserve,
             refReserve: {
-                level1: 50,
-                level2: 10,
-                level3: 10,
+                level1: 50 * cellsCount,
+                level2: 10 * cellsCount,
+                level3: 10 * cellsCount,
                 total: refReserveTotal
             },
             daoPool: daoFundShare,
