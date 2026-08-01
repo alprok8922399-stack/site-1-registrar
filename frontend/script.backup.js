@@ -8,6 +8,7 @@ const API_URL = ''; // Относительные запросы
 let cart = [];
 let logInterval = null;
 let currentUser = localStorage.getItem('mitron_user') || null;
+let userAccumulatedTotal = 0;
 
 // ==========================================
 // 1. ВИТРИНА И КАТАЛОГ ТОВАРОВ
@@ -80,10 +81,10 @@ function updateCartUI() {
 }
 
 // ==========================================
-// 2. МОДАЛЬНОЕ ОКНО РЕГИСТРАЦИИ
+// 2. МОДАЛЬНОЕ ОКНО РЕГИСТРАЦИИ И ПРОФИЛЯ
 // ==========================================
 
-window.openRegisterModal = function() {
+window.openRegisterModal = async function() {
     let modal = document.getElementById('registerModal');
     if (!modal) {
         modal = document.createElement('div');
@@ -92,15 +93,28 @@ window.openRegisterModal = function() {
         document.body.appendChild(modal);
     }
 
+    if (currentUser) {
+        await checkUserPurchases(currentUser);
+    }
+
     modal.innerHTML = `
         <div style="background:#ffffff; color:#1e293b; width:100%; max-width:400px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
-                <h3 style="margin:0; font-size:1.2rem;">👤 Регистрация / Вход</h3>
+                <h3 style="margin:0; font-size:1.2rem;">👤 Регистрация / Личный кабинет</h3>
                 <button onclick="document.getElementById('registerModal').style.display='none'" style="background:none; border:none; color:#64748b; font-size:1.5rem; cursor:pointer;">&times;</button>
             </div>
             ${currentUser ? `
                 <div style="text-align:center; padding:10px 0;">
-                    <p>Вы вошли как: <b>${currentUser}</b></p>
+                    <p style="margin-bottom:8px;">Вы вошли как: <b>${currentUser}</b></p>
+                    <div style="background:#f8fafc; padding:10px; border-radius:8px; font-size:0.9rem; margin-bottom:15px;">
+                        <div>Куплено всего: <b>${userAccumulatedTotal} / 5000 M</b></div>
+                        <div>Осталось лимита: <b>${Math.max(0, 5000 - userAccumulatedTotal)} M</b></div>
+                    </div>
+
+                    ${userAccumulatedTotal > 0 ? `
+                        <button onclick="refundPurchase()" style="width:100%; padding:10px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">❌ Отказаться от покупки (Возврат)</button>
+                    ` : ''}
+
                     <button onclick="logoutUser()" style="width:100%; padding:10px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Сменить аккаунт</button>
                 </div>
             ` : `
@@ -130,7 +144,7 @@ window.registerUser = function() {
 
     currentUser = username;
     localStorage.setItem('mitron_user', username);
-    alert(`Отлично! Вы зарегистрированы как "${username}".Теперь можете оформлять покупки.`);
+    alert(`Отлично! Вы зарегистрированы как "${username}". Теперь можете оформлять покупки.`);
     
     document.getElementById('registerModal').style.display = 'none';
     updateAuthUI();
@@ -138,6 +152,7 @@ window.registerUser = function() {
 
 window.logoutUser = function() {
     currentUser = null;
+    userAccumulatedTotal = 0;
     localStorage.removeItem('mitron_user');
     alert("Вы вышли из системы.");
     document.getElementById('registerModal').style.display = 'none';
@@ -151,11 +166,49 @@ function updateAuthUI() {
     }
 }
 
+// Получение информации о покупках пользователя
+async function checkUserPurchases(username) {
+    if (!username) return;
+    try {
+        const res = await fetch(`${API_URL}/api/shop/user-purchases/${encodeURIComponent(username)}`);
+        if (res.ok) {
+            const data = await res.json();
+            userAccumulatedTotal = data.totalSpent || 0;
+        }
+    } catch (err) {
+        console.error("Ошибка получения данных пользователя:", err);
+    }
+}
+
+// Отказ от покупки
+window.refundPurchase = async function() {
+    if (!currentUser) return;
+    if (!confirm("Вы уверены, что хотите отказаться от покупки? Средства будут возвращены, а ячейки аннулированы.")) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/shop/refund`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, amount: userAccumulatedTotal })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert("Запрос на возврат успешно выполнен!");
+            userAccumulatedTotal = 0;
+            openRegisterModal();
+        } else {
+            alert(`Ошибка при отказе: ${data.error}`);
+        }
+    } catch (err) {
+        alert(`Ошибка сети: ${err.message}`);
+    }
+};
+
 // ==========================================
 // 3. МОДАЛЬНОЕ ОКНО КОРЗИНЫ
 // ==========================================
 
-window.openCartModal = function() {
+window.openCartModal = async function() {
     let modal = document.getElementById('cartModal');
     if (!modal) {
         modal = document.createElement('div');
@@ -164,8 +217,14 @@ window.openCartModal = function() {
         document.body.appendChild(modal);
     }
     
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
     const savedUser = currentUser || '';
+    if (savedUser) {
+        await checkUserPurchases(savedUser);
+    }
+
+    const total = cart.reduce((sum, item) => sum + item.price, 0);
+    const combinedTotal = userAccumulatedTotal + total;
+    const isLimitExceeded = combinedTotal > 5000;
 
     modal.innerHTML = `
         <div style="background:#ffffff; color:#1e293b; width:100%; max-width:480px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
@@ -181,17 +240,47 @@ window.openCartModal = function() {
                     </div>
                 `).join('')}
             </div>
-            <div style="font-size:1.2rem; font-weight:bold; margin-bottom:15px; text-align:right;">
-                Итого: <span style="color:#10b981;">${total} M</span>
+            
+            <div style="font-size:1.1rem; font-weight:bold; margin-bottom:10px; text-align:right;">
+                Итого в корзине: <span style="color:#10b981;">${total} M</span>
             </div>
+
+            ${savedUser ? `
+                <div style="background:#f8fafc; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:15px;">
+                    <div>Ранее куплено на логин: <b>${userAccumulatedTotal} M</b></div>
+                    <div>Будет итого: <b style="color:${isLimitExceeded ? '#ef4444' : '#10b981'};">${combinedTotal} / 5000 M</b></div>
+                </div>
+            ` : ''}
+
+            ${isLimitExceeded ? `
+                <div style="background:#fee2e2; color:#dc2626; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:15px; text-align:center;">
+                    <b>🚫 Превышен глобальный лимит!</b><br>Максимальная сумма на один Логин до 5000 Митронов.
+                </div>
+            ` : ''}
+
             <div style="margin-bottom:15px;">
                 <label style="font-size:0.8rem; color:#64748b; display:block; margin-bottom:4px;">Логин покупателя:</label>
-                <input type="text" id="buyerUsername" value="${savedUser}" placeholder="Введите логин или зарегистрируйтесь" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
+                <input type="text" id="buyerUsername" value="${savedUser}" placeholder="Введите логин или зарегистрируйтесь" onchange="onBuyerChange(this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
             </div>
-            <button onclick="checkoutCart()" style="width:100%; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:pointer;">ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ</button>
+
+            ${userAccumulatedTotal > 0 ? `
+                <button onclick="refundPurchase()" style="width:100%; padding:10px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">ОТКАЗАТЬСЯ ОТ ПОКУПКИ</button>
+            ` : ''}
+
+            <button id="checkoutBtn" onclick="checkoutCart()" ${isLimitExceeded || cart.length === 0 ? 'disabled' : ''} style="width:100%; padding:12px; background:${isLimitExceeded || cart.length === 0 ? '#94a3b8' : '#10b981'}; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:${isLimitExceeded || cart.length === 0 ? 'not-allowed' : 'pointer'};">
+                ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ
+            </button>
         </div>
     `;
     modal.style.display = 'flex';
+};
+
+window.onBuyerChange = async function(val) {
+    if (val && val.trim()) {
+        currentUser = val.trim();
+        localStorage.setItem('mitron_user', currentUser);
+        await openCartModal();
+    }
 };
 
 window.checkoutCart = async function() {
@@ -208,7 +297,6 @@ window.checkoutCart = async function() {
         return;
     }
 
-    // Сохраняем логин для следующих покупок
     currentUser = username;
     localStorage.setItem('mitron_user', username);
 
@@ -223,8 +311,9 @@ window.checkoutCart = async function() {
 
         const data = await res.json();
         if (data.success) {
-            alert(`Успешно! Покупка оформлена на логин "${username}". Вы зарезервировали ${data.cellsCount || 1} яч. в матрице Сайта 2.`);
+            alert(`Успешно! Покупка оформлена на логин "${username}". Накоплено: ${data.accumulatedTotal || totalMitrons} M.`);
             cart = [];
+            userAccumulatedTotal = data.accumulatedTotal || 0;
             updateCartUI();
             document.getElementById('cartModal').style.display = 'none';
         } else {
@@ -382,7 +471,6 @@ function ensureAuthButtonInHeader() {
         btn.style.cssText = 'background: #6366f1; color: white; border: none; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.85rem; margin-right: 8px;';
         btn.onclick = () => window.openRegisterModal();
         
-        // Вставляем перед кнопкой Робота или в начало
         nav.insertBefore(btn, nav.firstChild);
     }
 }
@@ -391,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
     ensureAuthButtonInHeader();
 
-    // Перехват кликов по кнопкам
     document.addEventListener('click', (e) => {
         const target = e.target.closest('button, a, div');
         if (!target) return;
