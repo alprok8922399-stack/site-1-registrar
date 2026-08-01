@@ -1,495 +1,421 @@
 /**
- * Единый скрипт Витрины, Корзины, Регистрации и Управления Роботом (Сайт 1)
+ * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
+ * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок и работа с Роботом.
  */
 
-const API_URL = ''; // Относительные запросы
-
+const API_URL = '/api';
 let cart = [];
-let logInterval = null;
-let currentUser = localStorage.getItem('mitron_user') || null;
+let catalog = [];
 let userAccumulatedTotal = 0;
 
-// ==========================================
-// 1. ВИТРИНА И КАТАЛОГ ТОВАРОВ
-// ==========================================
+// 1. Старт инициализации
+document.addEventListener('DOMContentLoaded', () => {
+    loadProducts();
+    checkAuthStatus();
+    loadRefundStats();
+    loadUserOrders();
+});
 
-async function loadProducts() {
+// Загрузка статистики по отказам
+async function loadRefundStats() {
     try {
-        const res = await fetch(`${API_URL}/api/products`);
+        const res = await fetch(`${API_URL}/shop/refund-stats`);
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-                renderProducts(data);
-                return;
+            if (data.success && data.stats) {
+                const todayEl = document.getElementById('stat-refused-today');
+                const totalEl = document.getElementById('stat-refused-total');
+                
+                if (todayEl) todayEl.innerText = `${data.stats.refusedToday || 0} чел.`;
+                if (totalEl) totalEl.innerText = `${data.stats.totalRefused || 0} чел.`;
             }
         }
-    } catch (err) {
-        console.log("Ошибка загрузки каталога:", err);
+    } catch (e) {
+        console.error('Ошибка загрузки статистики отказов:', e);
     }
 }
 
-function renderProducts(products) {
-    let mainView = document.getElementById('productsContainer') || document.querySelector('.products-grid');
-    
-    if (!mainView) {
-        mainView = document.createElement('div');
-        mainView.id = 'productsContainer';
-        mainView.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 15px; padding: 15px;';
-        
-        const heading = document.querySelector('h1, h2') || document.body;
-        heading.after(mainView);
-    }
+// 2. Отрисовка товаров на витрине
+async function loadProducts() {
+    const grid = document.getElementById('productGrid');
+    if (!grid) return;
 
-    mainView.innerHTML = products.map((p, idx) => {
-        const title = p.title || p.name || `Товар #${idx + 1}`;
-        const price = p.priceMitrons || p.totalMitrons || p.price || 1000;
-        const costUsd = p.costUsd || p.basePriceUsd || '';
-        const markup = p.markupRate ? ` | Наценка: x${p.markupRate}` : '';
-        const desc = costUsd ? `Себестоимость: ${costUsd} USDT${markup} | Итого: ${price} М` : (p.description || '');
+    try {
+        const res = await fetch(`${API_URL}/products`);
+        if (res.ok) {
+            catalog = await res.json();
+        } else {
+            catalog = [
+                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
+                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
+                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" },
+                { id: 4, title: "Беспроводные наушники MITRON Sound *", priceMitrons: 500, description: "Себестоимость: 25 USDT | Наценка: x2.60 | Итого: 500 M" },
+                { id: 5, title: "Кожаный портмоне MITRON Leather *", priceMitrons: 346, description: "Себестоимость: 15 USDT | Наценка: x3.00 | Итого: 346 M" },
+                { id: 6, title: "Умная бутылка MITRON Hydro *", priceMitrons: 323, description: "Себестоимость: 18 USDT | Наценка: x2.33 | Итого: 323 M" },
+                { id: 7, title: "Фирменная кепка MITRON Cap *", priceMitrons: 215, description: "Себестоимость: 10 USDT | Наценка: x2.80 | Итого: 215 M" },
+                { id: 8, title: "Портативный PowerBank 20000 mAh *", priceMitrons: 446, description: "Себестоимость: 22 USDT | Наценка: x2.64 | Итого: 446 M" }
+            ];
+        }
+
+        renderCatalog();
+    } catch (e) {
+        console.error('Ошибка загрузки товаров:', e);
+    }
+}
+
+function renderCatalog() {
+    const grid = document.getElementById('productGrid');
+    if (!grid) return;
+
+    grid.innerHTML = catalog.map(p => {
+        const displayTitle = p.title || p.name;
+        const priceM = p.priceMitrons || p.priceM || 1000;
+        const image = p.image || 'https://via.placeholder.com/300x200';
+        const desc = p.description || '';
 
         return `
-            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); display: flex; flex-direction: column; justify-content: space-between;">
-                <div>
-                    <h3 style="margin: 0 0 10px 0; color: #1e293b; font-size: 1.1rem; font-weight: bold;">${title}</h3>
-                    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 12px;">${desc}</p>
-                </div>
-                <div>
-                    <div style="font-size: 1.3rem; font-weight: bold; color: #10b981; margin-bottom: 12px;">${price} М</div>
-                    <button onclick="addToCart('${p.id || idx}', '${title.replace(/'/g, "\\'")}', ${price})" style="width: 100%; background: #10b981; color: white; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer;">В корзину</button>
+            <div class="card">
+                <img src="${image}" alt="${displayTitle}">
+                <div class="card-content">
+                    <div>
+                        <div class="card-title">${displayTitle}</div>
+                        ${desc ? `<div style="font-size:11px; color:#777; margin-bottom:5px;">${desc}</div>` : ''}
+                    </div>
+                    <div>
+                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#00b894; margin-bottom:10px;">
+                            ${priceM} M
+                        </div>
+                        <button class="btn btn-add" style="width:100%; padding:10px; background:#00b894; color:#fff; border:none; border-radius:5px; cursor:pointer;" onclick="addToCart('${p.id}')">В корзину</button>
+                    </div>
                 </div>
             </div>
         `;
     }).join('');
 }
 
-window.addToCart = function(id, name, price) {
-    cart.push({ id, name, price });
+// 3. Управление корзиной
+function addToCart(productId) {
+    const item = catalog.find(p => String(p.id) === String(productId));
+    if (item) {
+        cart.push(item);
+        updateCartUI();
+        toggleCart(true);
+    }
+}
+
+function removeFromCart(index) {
+    cart.splice(index, 1);
     updateCartUI();
-    alert(`Товар "${name}" добавлен в корзину!`);
-};
+}
 
+// 4. Отрисовка корзины и валидация
 function updateCartUI() {
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
-    const cartBtns = document.querySelectorAll('.cart-btn, #cartBtn, button, a');
-    
-    cartBtns.forEach(btn => {
-        if (btn.textContent.includes('Корзина')) {
-            btn.textContent = `🛒 Корзина (${cart.length}) - ${total} M`;
-        }
-    });
-}
+    const badge = document.getElementById('cartBadge');
+    const itemsContainer = document.getElementById('cartItems');
+    const totalEl = document.getElementById('cartTotalM');
 
-// ==========================================
-// 2. МОДАЛЬНОЕ ОКНО РЕГИСТРАЦИИ И ПРОФИЛЯ
-// ==========================================
+    if (badge) badge.innerText = cart.length;
 
-window.openRegisterModal = async function() {
-    let modal = document.getElementById('registerModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'registerModal';
-        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding:15px;';
-        document.body.appendChild(modal);
-    }
-
-    if (currentUser) {
-        await checkUserPurchases(currentUser);
-    }
-
-    modal.innerHTML = `
-        <div style="background:#ffffff; color:#1e293b; width:100%; max-width:400px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
-                <h3 style="margin:0; font-size:1.2rem;">👤 Регистрация / Личный кабинет</h3>
-                <button onclick="document.getElementById('registerModal').style.display='none'" style="background:none; border:none; color:#64748b; font-size:1.5rem; cursor:pointer;">&times;</button>
-            </div>
-            ${currentUser ? `
-                <div style="text-align:center; padding:10px 0;">
-                    <p style="margin-bottom:8px;">Вы вошли как: <b>${currentUser}</b></p>
-                    <div style="background:#f8fafc; padding:10px; border-radius:8px; font-size:0.9rem; margin-bottom:15px;">
-                        <div>Куплено всего: <b>${userAccumulatedTotal} / 5000 M</b></div>
-                        <div>Осталось лимита: <b>${Math.max(0, 5000 - userAccumulatedTotal)} M</b></div>
-                    </div>
-
-                    ${userAccumulatedTotal > 0 ? `
-                        <button onclick="refundPurchase()" style="width:100%; padding:10px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">❌ Отказаться от покупки (Возврат)</button>
-                    ` : ''}
-
-                    <button onclick="logoutUser()" style="width:100%; padding:10px; background:#ef4444; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">Сменить аккаунт</button>
-                </div>
-            ` : `
-                <div style="margin-bottom:12px;">
-                    <label style="font-size:0.85rem; color:#64748b; display:block; margin-bottom:4px;">Придумайте ваш Логин:</label>
-                    <input type="text" id="regUsername" placeholder="Например: alex_2026" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
-                </div>
-                <div style="margin-bottom:15px;">
-                    <label style="font-size:0.85rem; color:#64748b; display:block; margin-bottom:4px;">Спонсор (кто пригласил):</label>
-                    <input type="text" id="regSponsor" placeholder="root (по умолчанию)" value="root" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
-                </div>
-                <button onclick="registerUser()" style="width:100%; padding:12px; background:#3b82f6; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:pointer;">ЗАРЕГИСТРИРОВАТЬСЯ</button>
-            `}
-        </div>
-    `;
-    modal.style.display = 'flex';
-};
-
-window.registerUser = function() {
-    const usernameInput = document.getElementById('regUsername');
-    const username = usernameInput ? usernameInput.value.trim() : '';
-
-    if (!username) {
-        alert("Введите логин для регистрации!");
-        return;
-    }
-
-    currentUser = username;
-    localStorage.setItem('mitron_user', username);
-    alert(`Отлично! Вы зарегистрированы как "${username}". Теперь можете оформлять покупки.`);
-    
-    document.getElementById('registerModal').style.display = 'none';
-    updateAuthUI();
-};
-
-window.logoutUser = function() {
-    currentUser = null;
-    userAccumulatedTotal = 0;
-    localStorage.removeItem('mitron_user');
-    alert("Вы вышли из системы.");
-    document.getElementById('registerModal').style.display = 'none';
-    updateAuthUI();
-};
-
-function updateAuthUI() {
-    const regBtn = document.getElementById('authNavBtn');
-    if (regBtn) {
-        regBtn.textContent = currentUser ? `👤 ${currentUser}` : `👤 Вход`;
-    }
-}
-
-// Получение информации о покупках пользователя
-async function checkUserPurchases(username) {
-    if (!username) return;
-    try {
-        const res = await fetch(`${API_URL}/api/shop/user-purchases/${encodeURIComponent(username)}`);
-        if (res.ok) {
-            const data = await res.json();
-            userAccumulatedTotal = data.totalSpent || 0;
-        }
-    } catch (err) {
-        console.error("Ошибка получения данных пользователя:", err);
-    }
-}
-
-// Отказ от покупки
-window.refundPurchase = async function() {
-    if (!currentUser) return;
-    if (!confirm("Вы уверены, что хотите отказаться от покупки? Средства будут возвращены, а ячейки аннулированы.")) return;
-
-    try {
-        const res = await fetch(`${API_URL}/api/shop/refund`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, amount: userAccumulatedTotal })
-        });
-        const data = await res.json();
-        if (data.success) {
-            alert("Запрос на возврат успешно выполнен!");
-            userAccumulatedTotal = 0;
-            openRegisterModal();
+    if (itemsContainer) {
+        if (cart.length === 0) {
+            itemsContainer.innerHTML = '<p style="color:#999; text-align:center; margin-top:30px;">Корзина пуста</p>';
         } else {
-            alert(`Ошибка при отказе: ${data.error}`);
-        }
-    } catch (err) {
-        alert(`Ошибка сети: ${err.message}`);
-    }
-};
-
-// ==========================================
-// 3. МОДАЛЬНОЕ ОКНО КОРЗИНЫ
-// ==========================================
-
-window.openCartModal = async function() {
-    let modal = document.getElementById('cartModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'cartModal';
-        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding:15px;';
-        document.body.appendChild(modal);
-    }
-    
-    const savedUser = currentUser || '';
-    if (savedUser) {
-        await checkUserPurchases(savedUser);
-    }
-
-    const total = cart.reduce((sum, item) => sum + item.price, 0);
-    const combinedTotal = userAccumulatedTotal + total;
-    const isLimitExceeded = combinedTotal > 5000;
-
-    modal.innerHTML = `
-        <div style="background:#ffffff; color:#1e293b; width:100%; max-width:480px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #e2e8f0; padding-bottom:10px;">
-                <h3 style="margin:0; font-size:1.2rem;">🛒 Ваша Корзина</h3>
-                <button onclick="document.getElementById('cartModal').style.display='none'" style="background:none; border:none; color:#64748b; font-size:1.5rem; cursor:pointer;">&times;</button>
-            </div>
-            <div style="max-height:200px; overflow-y:auto; margin-bottom:15px;">
-                ${cart.length === 0 ? '<p style="color:#94a3b8; text-align:center;">Корзина пуста</p>' : cart.map((item) => `
-                    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f1f5f9;">
-                        <span>${item.name}</span>
-                        <span style="font-weight:bold; color:#10b981;">${item.price} M</span>
+            itemsContainer.innerHTML = cart.map((item, idx) => `
+                <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
+                    <div>
+                        <strong>${item.title || item.name}</strong>
+                        <div style="font-size:12px; color:#666;">${item.priceMitrons || item.priceM} M</div>
                     </div>
-                `).join('')}
-            </div>
-            
-            <div style="font-size:1.1rem; font-weight:bold; margin-bottom:10px; text-align:right;">
-                Итого в корзине: <span style="color:#10b981;">${total} M</span>
-            </div>
-
-            ${savedUser ? `
-                <div style="background:#f8fafc; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:15px;">
-                    <div>Ранее куплено на логин: <b>${userAccumulatedTotal} M</b></div>
-                    <div>Будет итого: <b style="color:${isLimitExceeded ? '#ef4444' : '#10b981'};">${combinedTotal} / 5000 M</b></div>
+                    <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
                 </div>
-            ` : ''}
-
-            ${isLimitExceeded ? `
-                <div style="background:#fee2e2; color:#dc2626; padding:10px; border-radius:8px; font-size:0.85rem; margin-bottom:15px; text-align:center;">
-                    <b>🚫 Превышен глобальный лимит!</b><br>Максимальная сумма на один Логин до 5000 Митронов.
-                </div>
-            ` : ''}
-
-            <div style="margin-bottom:15px;">
-                <label style="font-size:0.8rem; color:#64748b; display:block; margin-bottom:4px;">Логин покупателя:</label>
-                <input type="text" id="buyerUsername" value="${savedUser}" placeholder="Введите логин или зарегистрируйтесь" onchange="onBuyerChange(this.value)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; box-sizing:border-box;">
-            </div>
-
-            ${userAccumulatedTotal > 0 ? `
-                <button onclick="refundPurchase()" style="width:100%; padding:10px; background:#f59e0b; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">ОТКАЗАТЬСЯ ОТ ПОКУПКИ</button>
-            ` : ''}
-
-            <button id="checkoutBtn" onclick="checkoutCart()" ${isLimitExceeded || cart.length === 0 ? 'disabled' : ''} style="width:100%; padding:12px; background:${isLimitExceeded || cart.length === 0 ? '#94a3b8' : '#10b981'}; color:white; border:none; border-radius:8px; font-weight:bold; font-size:1rem; cursor:${isLimitExceeded || cart.length === 0 ? 'not-allowed' : 'pointer'};">
-                ОПЛАТИТЬ И ЗАНЯТЬ ЯЧЕЙКИ
-            </button>
-        </div>
-    `;
-    modal.style.display = 'flex';
-};
-
-window.onBuyerChange = async function(val) {
-    if (val && val.trim()) {
-        currentUser = val.trim();
-        localStorage.setItem('mitron_user', currentUser);
-        await openCartModal();
+            `).join('');
+        }
     }
-};
 
-window.checkoutCart = async function() {
-    const usernameInput = document.getElementById('buyerUsername');
-    const username = usernameInput ? usernameInput.value.trim() : '';
-    
-    if (!username) {
-        alert("Пожалуйста, введите логин покупателя!");
+    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
+    if (totalEl) totalEl.innerText = `${totalM} M`;
+
+    validateCartUI(totalM);
+}
+
+// 5. Валидация корзины с учетом накопительного лимита (5000 M)
+function validateCartUI(totalM) {
+    const hint = document.getElementById('cartHint');
+    const payBtn = document.getElementById('payBtn');
+    if (!hint || !payBtn) return;
+
+    if (totalM === 0) {
+        hint.className = 'status-alert warning';
+        hint.innerText = 'Добавьте товары в корзину для оформления заказа.';
+        payBtn.disabled = true;
         return;
     }
 
-    if (cart.length === 0) {
-        alert("Корзина пуста!");
+    const grandTotal = userAccumulatedTotal + totalM;
+
+    if (grandTotal > 5000) {
+        hint.className = 'status-alert error';
+        hint.innerText = `Превышен глобальный лимит! Доступно: ${Math.max(0, 5000 - userAccumulatedTotal)} M. Уберите товары из корзины.`;
+        payBtn.disabled = true;
         return;
     }
 
-    currentUser = username;
+    const ranges = [
+        { min: 990, max: 1000 },
+        { min: 1990, max: 2000 },
+        { min: 2990, max: 3000 },
+        { min: 3990, max: 4000 },
+        { min: 4990, max: 5000 }
+    ];
+
+    const match = ranges.find(r => totalM >= r.min && totalM <= r.max);
+
+    if (match) {
+        hint.className = 'status-alert success';
+        hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
+        payBtn.disabled = false;
+    } else {
+        let target = ranges.find(r => r.max >= totalM);
+        if (!target) target = ranges[ranges.length - 1];
+
+        const needMore = target.min - totalM;
+        hint.className = 'status-alert warning';
+        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        payBtn.disabled = true;
+    }
+}
+
+// 6. Оплата заказа
+async function processPayment() {
+    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
+    const payBtn = document.getElementById('payBtn');
+    const hint = document.getElementById('cartHint');
+    const userInput = document.getElementById('usernameInput');
+
+    const username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
+
+    if (!username || username === 'Покупатель') {
+        if (hint) {
+            hint.className = 'status-alert error';
+            hint.innerText = 'Пожалуйста, укажите ваш логин покупателя.';
+        }
+        return;
+    }
+
     localStorage.setItem('mitron_user', username);
 
-    const totalMitrons = cart.reduce((sum, item) => sum + item.price, 0);
+    if (payBtn) payBtn.disabled = true;
+    if (hint) {
+        hint.className = 'status-alert warning';
+        hint.innerText = 'Обработка платежа и создание заказа...';
+    }
 
     try {
-        const res = await fetch(`${API_URL}/api/shop/checkout`, {
+        const res = await fetch(`${API_URL}/shop/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, totalMitrons, cartItems: cart })
+            body: JSON.stringify({
+                username: username,
+                totalMitrons: totalM,
+                cartItems: cart
+            })
         });
 
         const data = await res.json();
-        if (data.success) {
-            alert(`Успешно! Покупка оформлена на логин "${username}". Накоплено: ${data.accumulatedTotal || totalMitrons} M.`);
+
+        if (res.ok && data.success) {
+            if (hint) {
+                hint.className = 'status-alert success';
+                hint.innerText = 'Оплата прошла успешно! Ваш заказ оформлен.';
+            }
             cart = [];
-            userAccumulatedTotal = data.accumulatedTotal || 0;
+            userAccumulatedTotal = data.accumulatedTotal || (userAccumulatedTotal + totalM);
             updateCartUI();
-            document.getElementById('cartModal').style.display = 'none';
+            loadUserOrders();
+            setTimeout(() => toggleCart(false), 1500);
         } else {
-            alert(`Ошибка оплаты: ${data.error || 'Неизвестная ошибка'}`);
+            throw new Error(data.error || 'Ошибка при проведении оплаты');
         }
     } catch (err) {
-        alert(`Ошибка сети: ${err.message}`);
+        if (hint) {
+            hint.className = 'status-alert error';
+            hint.innerText = `Ошибка: ${err.message}`;
+        }
+        if (payBtn) payBtn.disabled = false;
     }
-};
-
-// ==========================================
-// 4. УПРАВЛЕНИЕ ГЕНЕРАТОРОМ РОБОТОВ
-// ==========================================
-
-function appendToConsole(text, isError = false) {
-    const consoleLog = document.getElementById('consoleLog');
-    if (!consoleLog) return;
-
-    const line = document.createElement('div');
-    line.className = 'log-line';
-    line.style.padding = '3px 0';
-    line.style.color = isError ? '#ef4444' : '#10b981';
-    
-    const now = new Date();
-    const timeStr = now.toISOString().split('T')[1].slice(0, 8);
-    line.textContent = `[${timeStr}] ${text}`;
-    
-    consoleLog.appendChild(line);
-    consoleLog.scrollTop = consoleLog.scrollHeight;
 }
 
-async function fetchLiveLogs() {
-    const consoleLog = document.getElementById('consoleLog');
-    if (!consoleLog) return;
+// Вспомогательная функция поиска/создания контейнера для заказов
+function getOrCreateOrdersContainer() {
+    let container = document.getElementById('userOrdersContainer');
+    if (!container) {
+        const drawer = document.getElementById('cartDrawer') || document.body;
+        container = document.createElement('div');
+        container.id = 'userOrdersContainer';
+        container.style.cssText = 'margin-top:20px; padding:10px; border-top:2px dashed #ccc;';
+        drawer.appendChild(container);
+    }
+    return container;
+}
+
+// 7. Управление заказами пользователя и отказ от покупок
+async function loadUserOrders() {
+    const ordersContainer = getOrCreateOrdersContainer();
+    const userInput = document.getElementById('usernameInput');
+    const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
+
+    if (!username || username === 'Покупатель') {
+        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Укажите ваш логин для просмотра заказов и функций отказа.</p>';
+        return;
+    }
 
     try {
-        const res = await fetch(`${API_URL}/api/robot/logs`);
-        if (!res.ok) return;
+        const res = await fetch(`${API_URL}/shop/orders?username=${encodeURIComponent(username)}`);
+        if (!res.ok) throw new Error('Не удалось загрузить заказы');
+
         const data = await res.json();
         
-        if (data && Array.isArray(data.logs)) {
-            const currentLinesCount = consoleLog.getElementsByClassName('log-line').length;
-            if (data.logs.length > currentLinesCount) {
-                for (let i = currentLinesCount; i < data.logs.length; i++) {
-                    appendToConsole(data.logs[i]);
-                }
-            }
+        userAccumulatedTotal = data.orders 
+            ? data.orders.filter(o => o.status !== 'REFUNDED').reduce((sum, o) => sum + (o.totalMitrons || o.amountMitrons || 0), 0)
+            : 0;
+
+        if (data.success && data.orders && data.orders.length > 0) {
+            ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
+                const createdDate = new Date(order.createdAt || Date.now());
+                const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                const isRefunded = order.status === 'REFUNDED';
+
+                return `
+                    <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <strong>Заказ #${order.id || order._id || '1'}</strong>
+                            <span style="font-size:12px; color:${isRefunded ? '#e74c3c' : '#2ecc71'}; font-weight:bold;">
+                                ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
+                            </span>
+                        </div>
+                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons || order.amountMitrons || 1000} M</strong></div>
+                        ${canRefund ? `
+                            <button 
+                                onclick="refundOrder('${order.id || order._id}')" 
+                                style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                                🚫 Отказаться от покупки (Возврат)
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        } else {
+            ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">У вас пока нет активных заказов.</p>';
         }
-    } catch (err) {
-        console.error("Ошибка обновления логов:", err);
+    } catch (e) {
+        console.error('Ошибка загрузки заказов:', e);
+        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Ошибка загрузки списка заказов.</p>';
     }
 }
 
-function updateRobotUI(isActive) {
+async function refundOrder(orderId) {
+    const userInput = document.getElementById('usernameInput');
+    const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
+
+    if (!username) return alert('Пожалуйста, укажите ваш логин');
+
+    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленные ячейки переданы Администратору.')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/shop/refund`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, orderId })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+            alert('Отказ оформлен! Покупка отменена, а ячейки переданы Администратору.');
+            loadUserOrders();
+            loadRefundStats();
+        } else {
+            alert(`Ошибка отказа: ${data.error || 'Неизвестная ошибка'}`);
+        }
+    } catch (err) {
+        console.error('Ошибка при отмене заказа:', err);
+        alert('Не удалось связаться с сервером');
+    }
+}
+
+// 8. Вход и Окна
+function checkAuthStatus() {
+    const user = localStorage.getItem('mitron_user');
+    const authBtn = document.getElementById('authBtn');
+    if (authBtn) {
+        authBtn.innerText = user ? `👤 ${user}` : '👤 Вход';
+    }
+    const input = document.getElementById('usernameInput');
+    if (input && user) {
+        input.value = user;
+    }
+}
+
+function handleAuthClick() {
+    const current = localStorage.getItem('mitron_user') || 'Покупатель';
+    const username = prompt('Введите ваш логин для входа:', current);
+    if (username) {
+        localStorage.setItem('mitron_user', username.trim());
+        checkAuthStatus();
+        loadUserOrders();
+    }
+}
+
+function toggleCart(open) {
+    const drawer = document.getElementById('cartDrawer');
+    if (drawer) drawer.classList.toggle('open', open);
+}
+
+function toggleModal(open) {
+    const modal = document.getElementById('modalOverlay');
+    if (modal) {
+        modal.classList.toggle('open', open);
+        if (open) fetchBotStatus();
+    }
+}
+
+// 9. Связь с Генератором Робота
+async function fetchBotStatus() {
     const statusLabel = document.getElementById('statusLabel');
     const actionBtn = document.getElementById('actionBtn');
 
-    if (!statusLabel || !actionBtn) return;
+    if (statusLabel) statusLabel.innerText = 'Запрос к серверу...';
 
-    if (isActive) {
-        statusLabel.textContent = "Робот работает";
-        statusLabel.style.color = "#10b981";
-        actionBtn.textContent = "ОСТАНОВИТЬ РОБОТА";
-        actionBtn.style.background = "#ef4444";
-        
-        if (!logInterval) {
-            logInterval = setInterval(fetchLiveLogs, 1000);
+    try {
+        const res = await fetch(`${API_URL}/test-bot/status`);
+        const data = await res.json();
+
+        if (statusLabel) {
+            statusLabel.innerText = data.active ? 'Генератор АКТИВЕН' : 'Генератор ОСТАНОВЛЕН';
+            statusLabel.className = `status-box ${data.active ? 'active' : ''}`;
         }
-    } else {
-        statusLabel.textContent = "Робот остановлен";
-        statusLabel.style.color = "#94a3b8";
-        actionBtn.textContent = "ЗАПУСТИТЬ РОБОТА";
-        actionBtn.style.background = "#3b82f6";
+
+        if (actionBtn) {
+            actionBtn.innerText = data.active ? 'Остановить Генератор' : 'Запустить Генератор';
+            actionBtn.onclick = () => toggleBot(!data.active);
+        }
+    } catch (err) {
+        if (statusLabel) statusLabel.innerText = 'Сервер недоступен';
     }
 }
 
-window.toggleRobotState = function() {
-    const actionBtn = document.getElementById('actionBtn');
-    if (!actionBtn) return;
-
-    const isRunning = actionBtn.textContent.includes("ОСТАНОВИТЬ");
-    const endpoint = isRunning ? '/api/robot/stop' : '/api/robot/start';
-
-    if (!isRunning) {
-        appendToConsole("Запуск робота...");
-    } else {
-        appendToConsole("Остановка робота...");
-    }
-
-    fetch(`${API_URL}${endpoint}`, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize: Math.floor(Math.random() * 11) + 10 })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
-            checkRobotStatus();
-        }
-    })
-    .catch(err => {
-        appendToConsole("Ошибка управления роботом: " + err.message, true);
-    });
-};
-
-window.openRobotModal = function() {
-    let modal = document.getElementById('robotModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'robotModal';
-        modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:9999; padding:15px;';
-        modal.innerHTML = `
-            <div style="background:#1e293b; color:white; width:100%; max-width:480px; border-radius:16px; padding:20px; box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <h3 style="margin:0;">🤖 Панель Робота</h3>
-                    <button onclick="document.getElementById('robotModal').style.display='none'" style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer;">&times;</button>
-                </div>
-                <div id="statusLabel" style="font-weight:bold; margin-bottom:15px;">Проверка статуса...</div>
-                <button id="actionBtn" onclick="window.toggleRobotState()" style="width:100%; padding:12px; border-radius:8px; border:none; color:white; font-weight:bold; cursor:pointer; background:#3b82f6; margin-bottom:15px;">ЗАПУСТИТЬ РОБОТА</button>
-                <div id="consoleLog" style="background:#0f172a; height:180px; overflow-y:auto; border-radius:8px; padding:10px; font-family:monospace; font-size:0.8rem;">
-                    <div>Ожидание запуска...</div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    } else {
-        modal.style.display = 'flex';
-    }
-    checkRobotStatus();
-};
-
-function checkRobotStatus() {
-    fetch(`${API_URL}/api/robot/status`)
-        .then(res => res.json())
-        .then(data => {
-            updateRobotUI(data.running);
-            fetchLiveLogs();
-        })
-        .catch(() => {
-            const statusLabel = document.getElementById('statusLabel');
-            if (statusLabel) statusLabel.textContent = "Ошибка связи с сервером";
-        });
-}
-
-// ==========================================
-// 5. ИНИЦИАЛИЗАЦИЯ И ДОБАВЛЕНИЕ КНОПКИ В ШАПКУ
-// ==========================================
-
-function ensureAuthButtonInHeader() {
-    const nav = document.querySelector('header nav, header, div[style*="background"]');
-    if (nav && !document.getElementById('authNavBtn')) {
-        const btn = document.createElement('button');
-        btn.id = 'authNavBtn';
-        btn.textContent = currentUser ? `👤 ${currentUser}` : `👤 Вход`;
-        btn.style.cssText = 'background: #6366f1; color: white; border: none; padding: 6px 12px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.85rem; margin-right: 8px;';
-        btn.onclick = () => window.openRegisterModal();
-        
-        nav.insertBefore(btn, nav.firstChild);
+async function toggleBot(enable) {
+    try {
+        await fetch(`${API_URL}/test-bot/${enable ? 'start' : 'stop'}`, { method: 'POST' });
+        fetchBotStatus();
+    } catch (err) {
+        console.error('Ошибка переключения генератора:', err);
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    loadProducts();
-    ensureAuthButtonInHeader();
-
-    document.addEventListener('click', (e) => {
-        const target = e.target.closest('button, a, div');
-        if (!target) return;
-        
-        const text = target.textContent || '';
-        if (text.includes('Робот')) {
-            e.preventDefault();
-            window.openRobotModal();
-        } else if (text.includes('Корзина')) {
-            e.preventDefault();
-            window.openCartModal();
-        }
-    });
-});
+// Глобальные мосты
+window.refundOrder = refundOrder;
+window.handleAuthClick = handleAuthClick;
