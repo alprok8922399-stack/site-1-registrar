@@ -173,10 +173,11 @@ function validateCartTotal(totalMitrons) {
     const minAllowed = targetBracket - 10;
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
-        const cellsCount = targetBracket / 1000;
+        const unitsCount = targetBracket / 1000;
         return { 
             valid: true, 
-            cellsCount: cellsCount, 
+            unitsCount: unitsCount,
+            cellsCount: unitsCount, // Сохраняем совместимость
             totalMitrons: totalMitrons, 
             targetBracket: targetBracket 
         };
