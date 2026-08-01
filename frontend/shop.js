@@ -172,7 +172,7 @@ function validateCartUI(totalM) {
 
     if (match) {
         hint.className = 'status-alert success';
-        hint.innerText = 'Сумма корзины корректна! Заказ готов к оформлению.';
+        hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
         payBtn.disabled = false;
     } else {
         let target = ranges.find(r => r.max >= totalM);
@@ -315,7 +315,7 @@ async function refundOrder(orderId) {
 
     if (!username) return alert('Пожалуйста, укажите ваш логин');
 
-    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме.')) {
+    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленный объем передается Администратору.')) {
         return;
     }
 
@@ -328,7 +328,7 @@ async function refundOrder(orderId) {
 
         const data = await res.json();
         if (res.ok && data.success) {
-            alert('Отказ оформлен! Покупка успешно отменена.');
+            alert('Отказ оформлен! Покупка отменена, средства возвращены.');
             loadUserOrders();
             loadRefundStats();
         } else {
