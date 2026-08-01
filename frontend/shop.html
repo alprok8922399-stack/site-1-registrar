@@ -30,13 +30,13 @@
         .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
         
         /* Выезжающая корзина */
-        .cart-drawer { position: fixed; top: 0; right: -400px; width: 100%; max-width: 380px; height: 100%; background: #fff; box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 1000; transition: right 0.3s ease; padding: 20px; display: flex; flex-direction: column; }
+        .cart-drawer { position: fixed; top: 0; right: -400px; width: 100%; max-width: 380px; height: 100%; background: #fff; box-shadow: -5px 0 15px rgba(0,0,0,0.1); z-index: 1000; transition: right 0.3s ease; padding: 20px; display: flex; flex-direction: column; overflow-y: auto; }
         .cart-drawer.open { right: 0; }
         .cart-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 15px; }
         .cart-title { font-size: 18px; font-weight: bold; }
         .close-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: #888; }
         
-        .cart-items { flex: 1; overflow-y: auto; margin-bottom: 15px; }
+        .cart-items { flex: 1; min-height: 120px; overflow-y: auto; margin-bottom: 15px; }
         
         .cart-footer { border-top: 1px solid #eee; padding-top: 15px; }
         .cart-total { font-size: 18px; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 15px; }
@@ -59,6 +59,7 @@
     <header>
         <div class="logo">MITRON</div>
         <div class="nav-btns">
+            <button id="authBtn" class="btn-header" onclick="handleAuthClick()">👤 Вход</button>
             <button class="btn-header btn-cart" onclick="toggleCart(true)">
                 🛒 Корзина <span id="cartBadge" class="badge">0</span>
             </button>
@@ -100,7 +101,7 @@
 
             <div class="form-group">
                 <label for="usernameInput">Логин покупателя:</label>
-                <input type="text" id="usernameInput" value="Покупатель" placeholder="Введите ваш логин">
+                <input type="text" id="usernameInput" placeholder="Введите ваш логин" onchange="loadUserOrders()">
             </div>
 
             <div id="cartHint" class="status-alert warning">
@@ -109,8 +110,11 @@
 
             <button id="payBtn" class="btn-pay" onclick="processPayment()" disabled>ОПЛАТИТЬ ЗАКАЗ</button>
         </div>
+
+        <div id="userOrdersContainer" style="margin-top:20px; padding-top:15px; border-top:2px dashed #eee;">
+        </div>
     </div>
 
     <script src="shop.js"></script>
 </body>
-    </html>
+</html>
