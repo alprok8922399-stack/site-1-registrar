@@ -387,7 +387,21 @@ app.post('/api/shop/refund', async (req, res) => {
         return res.status(400).json({ success: false, error: "Укажите логин" });
     }
     const cleanUser = username.trim();
-    const refundAmount = amount || 1000;
+    const userOrders = userOrdersStore[cleanUser] || [];
+    
+    // Ищем точный заказ в базе
+    const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
+    
+    // Если сумма передана — берем её, иначе берем сумму из заказа, иначе по дефолту 1000
+    let refundAmount = Number(amount);
+    if (!refundAmount || isNaN(refundAmount)) {
+        if (targetOrder && targetOrder.totalMitrons) {
+            refundAmount = Number(targetOrder.totalMitrons);
+        } else {
+            refundAmount = 1000;
+        }
+    }
+
     const unitsToRefund = Math.max(1, Math.round(refundAmount / 1000));
 
     logRefund(cleanUser, refundAmount);
@@ -412,7 +426,7 @@ app.post('/api/shop/refund', async (req, res) => {
     if (userOrdersStore[cleanUser]) {
         userOrdersStore[cleanUser] = userOrdersStore[cleanUser].map(o => {
             if (String(o.id) === String(orderId) || !orderId) {
-                return { ...o, status: 'REFUNDED' };
+                return { ...o, status: 'REFUNDED', isRefunded: true };
             }
             return o;
         });
@@ -426,6 +440,8 @@ app.post('/api/shop/refund', async (req, res) => {
     res.json({ 
         success: true, 
         message: "Отказ зафиксирован, средства возвращены в полном объеме.",
+        refundedAmount: refundAmount,
+        unitsCount: unitsToRefund,
         accumulatedTotal: userPurchasesTotal[cleanUser] || 0
     });
 });
