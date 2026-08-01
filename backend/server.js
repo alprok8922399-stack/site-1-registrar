@@ -69,7 +69,7 @@ async function registerBatch(requestedBatchSize) {
     if (!isRobotRunning) return;
 
     const batchSize = requestedBatchSize || Math.floor(Math.random() * 11) + 10;
-    logEvent(`Старт порции: регистрируем ${batchSize} ботов...`);
+    logEvent(`Старт порции: регистрируем ${batchSize} заказов...`);
 
     for (let i = 0; i < batchSize; i++) {
         if (!isRobotRunning) break;
@@ -81,14 +81,14 @@ async function registerBatch(requestedBatchSize) {
             const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, cellsCount: 1, amountMitrons: 1000 })
+                body: JSON.stringify({ username: botName, unitsCount: 1, amountMitrons: 1000 })
             });
 
             const data = await res.json();
             if (data.success) {
-                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId || 'активирован'}`);
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} оформил заказ`);
             } else {
-                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец структуры'}`);
+                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Завершение обработки'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
@@ -224,7 +224,7 @@ app.post('/api/shop/pay', async (req, res) => {
             body: JSON.stringify({ 
                 username: cleanUser, 
                 hashId: hashId,
-                cellsCount: validation.cellsCount, 
+                unitsCount: validation.unitsCount || validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
                 uplineUser: uplineUser || null
             })
@@ -325,7 +325,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             body: JSON.stringify({ 
                 username: cleanUser,
                 hashId: hashId,
-                cellsCount: validation.cellsCount,
+                unitsCount: validation.unitsCount || validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
                 uplineUser: uplineUser || null
@@ -388,11 +388,11 @@ app.post('/api/shop/refund', async (req, res) => {
     }
     const cleanUser = username.trim();
     const refundAmount = amount || 1000;
-    const cellsToRefund = Math.max(1, Math.round(refundAmount / 1000));
+    const unitsToRefund = Math.max(1, Math.round(refundAmount / 1000));
 
     logRefund(cleanUser, refundAmount);
 
-    // Передаем точное количество ячеек на Сайт 2 для передачи их Администратору
+    // Передаем точное количество единиц на Сайт 2
     try {
         await fetch(`${SITE2_URL}/api/admin/refund-user`, {
             method: 'POST',
@@ -401,7 +401,7 @@ app.post('/api/shop/refund', async (req, res) => {
                 username: cleanUser,
                 orderId: orderId,
                 amount: refundAmount,
-                cellsCount: cellsToRefund
+                unitsCount: unitsToRefund
             })
         });
     } catch (e) {
