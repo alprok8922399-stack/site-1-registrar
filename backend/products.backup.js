@@ -1,21 +1,23 @@
 /**
  * Модуль каталога товаров Маркетплейса (Сайт 1)
+ * Проект: MITRON
  * Базовая валюта себестоимости: USDT ($)
  * Курс: 1000 Mitron (M) = 130 USDT (1 M = 0.13 USDT)
- * Коэффициент наценки: не менее 2.2 + подтяжка к "потолку" цен
+ * Правило цен: Минимальный коэффициент x2.2 с автоматической подтяжкой к "Потолку" цен
  */
 
 const MIN_COEFFICIENT = 2.2;
-const MITRON_PER_USDT = 1000 / 130; // ~7.692 M за 1 USDT
+const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
 
-// Базовый список товаров (с указанием себестоимости и "потолка" розничной цены в USDT)
+// Базовый каталог товаров (Расширенный список)
 const initialProducts = [
     {
         id: 1,
         title: "Сертификат MITRON 1000",
         category: "Сертификаты",
         costUsdt: 130, 
-        ceilingPriceUsdt: 130, // Для сертификата ровно 1000 M
+        ceilingPriceUsdt: 130,
+        isCertificate: true,
         image: "https://via.placeholder.com/300x200?text=Certificate+1000"
     },
     {
@@ -23,7 +25,8 @@ const initialProducts = [
         title: "Смарт-часы MITRON Watch Pro",
         category: "Электроника",
         costUsdt: 65, 
-        ceilingPriceUsdt: 160, // Потолок цен по рынку
+        ceilingPriceUsdt: 160,
+        isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
     {
@@ -31,60 +34,161 @@ const initialProducts = [
         title: "Фирменное худи MITRON DAO",
         category: "Одежда",
         costUsdt: 32.5, 
-        ceilingPriceUsdt: 85, // Потолок цен по рынку
+        ceilingPriceUsdt: 85,
+        isCertificate: false,
         image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
+    },
+    {
+        id: 4,
+        title: "Беспроводные наушники MITRON Sound",
+        category: "Электроника",
+        costUsdt: 25, 
+        ceilingPriceUsdt: 65,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Sound"
+    },
+    {
+        id: 5,
+        title: "Кожаный портмоне MITRON Leather",
+        category: "Аксессуары",
+        costUsdt: 15, 
+        ceilingPriceUsdt: 45,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Wallet"
+    },
+    {
+        id: 6,
+        title: "Умная бутылка для воды MITRON Hydro",
+        category: "Спорт",
+        costUsdt: 18, 
+        ceilingPriceUsdt: 42,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Bottle"
+    },
+    {
+        id: 7,
+        title: "Фирменная кепка MITRON Cap",
+        category: "Одежда",
+        costUsdt: 10, 
+        ceilingPriceUsdt: 28,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+Cap"
+    },
+    {
+        id: 8,
+        title: "Портативный PowerBank 20000 mAh",
+        category: "Электроника",
+        costUsdt: 22, 
+        ceilingPriceUsdt: 58,
+        isCertificate: false,
+        image: "https://via.placeholder.com/300x200?text=Mitron+PowerBank"
     }
 ];
 
 /**
- * Расчет розничной цены в Митронах:
- * Берется нижний порог (себестоимость * 2.2).
- * Если ceilingPriceUsdt дает цену выше нижнего порога, подтягивается к потолку.
+ * Расчет розничной цены в Митронах по правилу x2.2 и Потолка цен
  */
 function calculateRetailPriceMitrons(product) {
+    if (product.isCertificate) {
+        return {
+            priceMitrons: 1000,
+            finalUsdt: 130,
+            hasCeilingGap: false
+        };
+    }
+
     const minPriceUsdt = product.costUsdt * MIN_COEFFICIENT;
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
-    return Math.round(finalUsdt * MITRON_PER_USDT);
+    const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
+    
+    // Пометка '*', если цена установлена по Потолку
+    const hasCeilingGap = (product.ceilingPriceUsdt / product.costUsdt) >= MIN_COEFFICIENT;
+
+    return {
+        priceMitrons: finalMitrons,
+        finalUsdt: finalUsdt,
+        hasCeilingGap: hasCeilingGap
+    };
 }
 
-// Получить каталог товаров
+/**
+ * Получить полный каталог товаров с просчитанной экономикой
+ */
 function getProductsCatalog() {
     return initialProducts.map(product => {
-        const finalPriceMitrons = calculateRetailPriceMitrons(product);
-        const effectiveCoeff = (finalPriceMitrons / (product.costUsdt * MITRON_PER_USDT)).toFixed(2);
+        const priceData = calculateRetailPriceMitrons(product);
+        
+        let effectiveCoeff = 1.0;
+        let description = `Номинал: 1000 M | Стоимость: 130 USDT`;
+
+        if (!product.isCertificate) {
+            effectiveCoeff = (priceData.priceMitrons / (product.costUsdt * MITRON_PER_USDT)).toFixed(2);
+            description = `Себестоимость: ${product.costUsdt} USDT | Наценка: x${effectiveCoeff} | Итого: ${priceData.priceMitrons} M`;
+        }
+
+        const displayTitle = priceData.hasCeilingGap ? `${product.title} *` : product.title;
+
         return {
             ...product,
-            priceMitrons: finalPriceMitrons,
+            title: displayTitle,
+            priceMitrons: priceData.priceMitrons,
             coefficient: effectiveCoeff,
-            description: `Себестоимость: ${product.costUsdt} USDT | Наценка: x${effectiveCoeff} | Итого: ${finalPriceMitrons} M`
+            hasStarMark: priceData.hasCeilingGap,
+            description: description
         };
     });
 }
 
 /**
- * Проверка допустимости корзины (990-1000 M, 1990-2000 M, 2990-3000 M, 3990-4000 M, 4990-5000 M)
+ * Модуль подбора доборных товаров для закрытия нехватки до ближайшей 1000 М
+ */
+function suggestAddonProducts(neededMitrons) {
+    const catalog = getProductsCatalog();
+    return catalog.filter(p => p.priceMitrons <= neededMitrons + 50);
+}
+
+/**
+ * Валидатор Корзины Сайта 1 (Диапазоны 990-1000, 1990-2000, 2990-3000, 3990-4000, 4990-5000)
  */
 function validateCartTotal(totalMitrons) {
     if (totalMitrons <= 0) {
-        return { valid: false, message: "Корзина пуста", targetBracket: 1000, needed: 1000 };
+        return { 
+            valid: false, 
+            message: "Корзина пуста. Добавьте товары.", 
+            targetBracket: 1000, 
+            needed: 1000 
+        };
     }
+
     if (totalMitrons > 5000) {
-        return { valid: false, message: "Максимальный объем одной покупки — 5000 Митронов", targetBracket: 5000, needed: 0 };
+        return { 
+            valid: false, 
+            message: "Максимальный объем одной покупки за один раз — 5000 Митронов!", 
+            targetBracket: 5000, 
+            needed: 0 
+        };
     }
 
     const targetBracket = Math.ceil(totalMitrons / 1000) * 1000;
-    const minAllowed = targetBracket - 10; // Диапазон от X990 до X000
+    const minAllowed = targetBracket - 10;
 
     if (totalMitrons >= minAllowed && totalMitrons <= targetBracket) {
         const cellsCount = targetBracket / 1000;
-        return { valid: true, cellsCount, totalMitrons, targetBracket };
+        return { 
+            valid: true, 
+            cellsCount: cellsCount, 
+            totalMitrons: totalMitrons, 
+            targetBracket: targetBracket 
+        };
     } else {
-        const needed = minAllowed - totalMitrons;
+        const needed = Math.round(minAllowed - totalMitrons);
+        const addons = suggestAddonProducts(needed > 0 ? needed : 0);
         return { 
             valid: false, 
-            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов (цель: ${minAllowed}-${targetBracket} M)`,
-            targetBracket,
-            needed: needed > 0 ? needed : 0
+            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
+            targetBracket: targetBracket,
+            needed: needed > 0 ? needed : 0,
+            addons: addons
         };
     }
 }
@@ -92,5 +196,6 @@ function validateCartTotal(totalMitrons) {
 module.exports = {
     getProductsCatalog,
     calculateRetailPriceMitrons,
-    validateCartTotal
+    validateCartTotal,
+    suggestAddonProducts
 };
