@@ -280,6 +280,7 @@ async function loadUserOrders() {
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
                 const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
+                const orderAmount = order.totalMitrons || order.amountMitrons || 1000;
 
                 return `
                     <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
@@ -289,10 +290,10 @@ async function loadUserOrders() {
                                 ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
                             </span>
                         </div>
-                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons || order.amountMitrons || 1000} M</strong></div>
+                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${orderAmount} M</strong></div>
                         ${canRefund ? `
                             <button 
-                                onclick="refundOrder('${order.id || order._id}')" 
+                                onclick="refundOrder('${order.id || order._id}', ${orderAmount})" 
                                 style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
                                 🚫 Отказаться от покупки (Возврат)
                             </button>
@@ -309,13 +310,13 @@ async function loadUserOrders() {
     }
 }
 
-async function refundOrder(orderId) {
+async function refundOrder(orderId, amount) {
     const userInput = document.getElementById('usernameInput');
     const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
 
     if (!username) return alert('Пожалуйста, укажите ваш логин');
 
-    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленные ячейки переданы Администратору.')) {
+    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленный объем передается Администратору.')) {
         return;
     }
 
@@ -323,12 +324,12 @@ async function refundOrder(orderId) {
         const res = await fetch(`${API_URL}/shop/refund`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, orderId })
+            body: JSON.stringify({ username, orderId, amount: Number(amount) || 1000 })
         });
 
         const data = await res.json();
         if (res.ok && data.success) {
-            alert('Отказ оформлен! Покупка отменена, а ячейки переданы Администратору.');
+            alert('Отказ оформлен! Покупка отменена, средства возвращены.');
             loadUserOrders();
             loadRefundStats();
         } else {
