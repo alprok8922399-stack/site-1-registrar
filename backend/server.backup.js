@@ -8,6 +8,7 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { getProductsCatalog, validateCartTotal } = require('./products');
 const { calculatePurchaseFinance, logRefund, getRefundStats } = require('./finance');
 
@@ -20,6 +21,7 @@ app.use(express.json());
 // Хранилище накопленных покупок по логинам (для соблюдения лимита макс 5000 M на логин)
 const userPurchasesTotal = {};
 const userOrdersStore = {};
+const userHashIds = {}; // Хранилище сгенерированных Hash-ID для Web3 DAO
 
 // Универсальное определение пути к папке frontend для Render
 function getFrontendPath() {
@@ -55,11 +57,19 @@ function logEvent(message) {
     console.log(`[Робот] ${message}`);
 }
 
+// Генерация уникального Hash-ID (UUID)
+function getOrCreateHashId(username) {
+    if (!userHashIds[username]) {
+        userHashIds[username] = 'MTR-' + crypto.randomBytes(8).toString('hex').toUpperCase();
+    }
+    return userHashIds[username];
+}
+
 async function registerBatch(requestedBatchSize) {
     if (!isRobotRunning) return;
 
     const batchSize = requestedBatchSize || Math.floor(Math.random() * 11) + 10;
-    logEvent(`Старт порции: регистрируем ${batchSize} ботов...`);
+    logEvent(`Старт порции: регистрируем ${batchSize} заказов...`);
 
     for (let i = 0; i < batchSize; i++) {
         if (!isRobotRunning) break;
@@ -71,14 +81,14 @@ async function registerBatch(requestedBatchSize) {
             const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, cellsCount: 1, amountMitrons: 1000 })
+                body: JSON.stringify({ username: botName, unitsCount: 1, amountMitrons: 1000 })
             });
 
             const data = await res.json();
             if (data.success) {
-                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ячейку ${data.cellId || 'активирован'}`);
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} оформил заказ`);
             } else {
-                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Конец структуры'}`);
+                logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Завершение обработки'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
@@ -135,9 +145,12 @@ app.post('/api/shop/register', async (req, res) => {
     }
 
     const cleanUser = username.trim();
+    const hashId = getOrCreateHashId(cleanUser);
+
     return res.json({ 
         success: true, 
         username: cleanUser,
+        hashId: hashId,
         accumulatedMitrons: userPurchasesTotal[cleanUser] || 0,
         message: 'Регистрация успешна. Ожидайте оплаты товаров.' 
     });
@@ -150,7 +163,9 @@ app.get('/api/shop/orders', (req, res) => {
         return res.status(400).json({ success: false, error: 'Укажите логин' });
     }
     const orders = userOrdersStore[username] || [];
-    res.json({ success: true, orders });
+    const hashId = getOrCreateHashId(username);
+
+    res.json({ success: true, orders, hashId });
 });
 
 // Проверка накопительного лимита пользователя
@@ -158,9 +173,12 @@ app.get('/api/shop/user-purchases/:username', (req, res) => {
     const cleanUser = (req.params.username || '').trim();
     const totalSpent = userPurchasesTotal[cleanUser] || 0;
     const orders = userOrdersStore[cleanUser] || [];
+    const hashId = getOrCreateHashId(cleanUser);
+
     res.json({
         success: true,
         username: cleanUser,
+        hashId: hashId,
         totalSpent: totalSpent,
         remainingLimit: Math.max(0, 5000 - totalSpent),
         canBuy: totalSpent < 5000,
@@ -197,17 +215,29 @@ app.post('/api/shop/pay', async (req, res) => {
         });
     }
 
+    const hashId = getOrCreateHashId(cleanUser);
+
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 username: cleanUser, 
-                cellsCount: validation.cellsCount, 
+                hashId: hashId,
+                unitsCount: validation.unitsCount || validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
                 uplineUser: uplineUser || null
             })
         });
+
+        const contentType = site2Res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            return res.status(503).json({
+                success: false,
+                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите нажатие кнопки "ОПЛАТИТЬ" через 10-15 секунд.'
+            });
+        }
+
         const site2Data = await site2Res.json();
         
         if (site2Data.error) {
@@ -220,6 +250,7 @@ app.post('/api/shop/pay', async (req, res) => {
         userOrdersStore[cleanUser].push({
             id: Date.now(),
             totalMitrons: validation.totalMitrons,
+            hashId: hashId,
             status: 'PAID',
             createdAt: new Date().toISOString()
         });
@@ -230,12 +261,16 @@ app.post('/api/shop/pay', async (req, res) => {
         return res.json({ 
             success: true, 
             finance: financeData,
+            hashId: hashId,
             shopUserStatus: { balance: 0 },
             accumulatedTotal: userPurchasesTotal[cleanUser],
             message: 'Оплата прошла успешно! Ваш заказ оформлен.'
         });
     } catch (err) {
-        return res.status(500).json({ success: false, error: `Ошибка при обработке заказа: ${err.message}` });
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+        });
     }
 });
 
@@ -281,18 +316,29 @@ app.post('/api/shop/checkout', async (req, res) => {
         });
     }
 
+    const hashId = getOrCreateHashId(cleanUser);
+
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 username: cleanUser,
-                cellsCount: validation.cellsCount,
+                hashId: hashId,
+                unitsCount: validation.unitsCount || validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
                 uplineUser: uplineUser || null
             })
         });
+
+        const contentType = site2Res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            return res.status(503).json({
+                success: false,
+                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите нажатие кнопки "ОПЛАТИТЬ" через 10-15 секунд.'
+            });
+        }
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
@@ -303,6 +349,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             const newOrder = {
                 id: Date.now(),
                 totalMitrons: validation.totalMitrons,
+                hashId: hashId,
                 items: cartItems || [],
                 status: 'PAID',
                 createdAt: new Date().toISOString()
@@ -318,6 +365,7 @@ app.post('/api/shop/checkout', async (req, res) => {
                 success: true, 
                 order: newOrder,
                 finance: financeData,
+                hashId: hashId,
                 accumulatedTotal: userPurchasesTotal[cleanUser],
                 message: "Заказ успешно оплачен и оформлен!" 
             });
@@ -325,7 +373,10 @@ app.post('/api/shop/checkout', async (req, res) => {
             return res.status(500).json({ success: false, error: site2Data.error || "Ошибка при оформлении заказа" });
         }
     } catch (err) {
-        return res.status(500).json({ success: false, error: `Ошибка при проведении покупки: ${err.message}` });
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+        });
     }
 });
 
@@ -336,16 +387,36 @@ app.post('/api/shop/refund', async (req, res) => {
         return res.status(400).json({ success: false, error: "Укажите логин" });
     }
     const cleanUser = username.trim();
-    const refundAmount = amount || 1000;
+    const userOrders = userOrdersStore[cleanUser] || [];
+    
+    // Ищем точный заказ в базе
+    const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
+    
+    // Если сумма передана — берем её, иначе берем сумму из заказа, иначе по дефолту 1000
+    let refundAmount = Number(amount);
+    if (!refundAmount || isNaN(refundAmount)) {
+        if (targetOrder && targetOrder.totalMitrons) {
+            refundAmount = Number(targetOrder.totalMitrons);
+        } else {
+            refundAmount = 1000;
+        }
+    }
+
+    const unitsToRefund = Math.max(1, Math.round(refundAmount / 1000));
 
     logRefund(cleanUser, refundAmount);
 
-    // Передаем команду отмены на Сайт 2 (передача ячеек Администрации)
+    // Передаем точное количество единиц на Сайт 2
     try {
         await fetch(`${SITE2_URL}/api/admin/refund-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: cleanUser })
+            body: JSON.stringify({ 
+                username: cleanUser,
+                orderId: orderId,
+                amount: refundAmount,
+                unitsCount: unitsToRefund
+            })
         });
     } catch (e) {
         console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
@@ -355,20 +426,22 @@ app.post('/api/shop/refund', async (req, res) => {
     if (userOrdersStore[cleanUser]) {
         userOrdersStore[cleanUser] = userOrdersStore[cleanUser].map(o => {
             if (String(o.id) === String(orderId) || !orderId) {
-                return { ...o, status: 'REFUNDED' };
+                return { ...o, status: 'REFUNDED', isRefunded: true };
             }
             return o;
         });
     }
 
-    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе
+    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе, чтобы освободить лимит
     if (userPurchasesTotal[cleanUser]) {
         userPurchasesTotal[cleanUser] = Math.max(0, userPurchasesTotal[cleanUser] - refundAmount);
     }
     
     res.json({ 
         success: true, 
-        message: "Отказ зафиксирован, средства возвращены, ячейка перешла Администрации.",
+        message: "Отказ зафиксирован, средства возвращены в полном объеме.",
+        refundedAmount: refundAmount,
+        unitsCount: unitsToRefund,
         accumulatedTotal: userPurchasesTotal[cleanUser] || 0
     });
 });
