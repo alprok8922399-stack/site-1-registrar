@@ -192,15 +192,17 @@ async function processPayment() {
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
 
-    const username = userInput ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
+    const username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
 
-    if (!username) {
+    if (!username || username === 'Покупатель') {
         if (hint) {
             hint.className = 'status-alert error';
-            hint.innerText = 'Пожалуйста, укажите логин покупателя.';
+            hint.innerText = 'Пожалуйста, укажите ваш логин покупателя.';
         }
         return;
     }
+
+    localStorage.setItem('mitron_user', username);
 
     if (payBtn) payBtn.disabled = true;
     if (hint) {
@@ -229,7 +231,7 @@ async function processPayment() {
             cart = [];
             updateCartUI();
             loadUserOrders();
-            setTimeout(() => toggleCart(false), 2000);
+            setTimeout(() => toggleCart(false), 1500);
         } else {
             throw new Error(data.error || 'Ошибка при проведении оплаты');
         }
@@ -242,14 +244,28 @@ async function processPayment() {
     }
 }
 
-// 7. Управление заказами пользователя и КНОПКА ОТКАЗА
-async function loadUserOrders() {
-    const ordersContainer = document.getElementById('userOrdersContainer');
-    if (!ordersContainer) return;
+// Вспомогательная функция поиска/создания контейнера для заказов
+function getOrCreateOrdersContainer() {
+    let container = document.getElementById('userOrdersContainer');
+    if (!container) {
+        const drawer = document.getElementById('cartDrawer') || document.body;
+        container = document.createElement('div');
+        container.id = 'userOrdersContainer';
+        container.style.cssText = 'margin-top:20px; padding:10px; border-top:2px dashed #ccc;';
+        drawer.appendChild(container);
+    }
+    return container;
+}
 
-    const username = localStorage.getItem('mitron_user');
-    if (!username) {
-        ordersContainer.innerHTML = '<p style="color:#888;">Войдите в систему, чтобы просмотреть свои заказы.</p>';
+// 7. Управление заказами пользователя и ОТОБРАЖЕНИЕ КНОПКИ ОТКАЗА
+async function loadUserOrders() {
+    const ordersContainer = getOrCreateOrdersContainer();
+
+    const userInput = document.getElementById('usernameInput');
+    const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
+
+    if (!username || username === 'Покупатель') {
+        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Укажите ваш логин для просмотра заказов и функций отказа.</p>';
         return;
     }
 
@@ -259,44 +275,47 @@ async function loadUserOrders() {
 
         const data = await res.json();
         if (data.success && data.orders && data.orders.length > 0) {
-            ordersContainer.innerHTML = data.orders.map(order => {
+            ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
                 const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                const isRefunded = order.status === 'REFUNDED';
 
                 return `
-                    <div style="background:#f9f9f9; border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:10px;">
+                    <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <strong>Заказ #${order.id || order._id || '1'}</strong>
-                            <span style="font-size:12px; color:${order.status === 'REFUNDED' ? 'red' : 'green'}; font-weight:bold;">
-                                ${order.status === 'REFUNDED' ? 'Возвращен' : 'Оплачен'} (${diffDays} дн.)
+                            <span style="font-size:12px; color:${isRefunded ? '#e74c3c' : '#2ecc71'}; font-weight:bold;">
+                                ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
                             </span>
                         </div>
-                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons} M</strong></div>
+                        <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons || order.amountMitrons || 1000} M</strong></div>
                         ${canRefund ? `
                             <button 
                                 onclick="refundOrder('${order.id || order._id}')" 
-                                style="width:100%; padding:8px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">
-                                🚫 Отказаться от покупки
+                                style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                                🚫 Отказаться от покупки (Возврат)
                             </button>
                         ` : ''}
                     </div>
                 `;
             }).join('');
         } else {
-            ordersContainer.innerHTML = '<p style="color:#888;">У вас пока нет активных заказов.</p>';
+            ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">У вас пока нет активных заказов.</p>';
         }
     } catch (e) {
         console.error('Ошибка загрузки заказов:', e);
-        ordersContainer.innerHTML = '<p style="color:#888;">Ошибка загрузки списка заказов.</p>';
+        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Ошибка загрузки списка заказов.</p>';
     }
 }
 
 async function refundOrder(orderId) {
-    const username = localStorage.getItem('mitron_user');
-    if (!username) return alert('Вы не авторизованы');
+    const userInput = document.getElementById('usernameInput');
+    const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
 
-    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а аккаунт аннулирован.')) {
+    if (!username) return alert('Пожалуйста, укажите ваш логин');
+
+    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленные ячейки переданы Администратору.')) {
         return;
     }
 
@@ -309,7 +328,7 @@ async function refundOrder(orderId) {
 
         const data = await res.json();
         if (res.ok && data.success) {
-            alert('Отказ оформлен! Средства полностью возвращены.');
+            alert('Отказ оформлен! Покупка отменена, а ячейки переданы Администратору.');
             loadUserOrders();
             loadRefundStats();
         } else {
