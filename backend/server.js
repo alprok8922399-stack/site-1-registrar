@@ -188,12 +188,13 @@ app.get('/api/shop/user-purchases/:username', (req, res) => {
 
 // Оплата и покупка
 app.post('/api/shop/pay', async (req, res) => {
-    const { username, amountMitrons, uplineUser } = req.body || {};
+    const { username, amountMitrons, uplineUser, sponsor } = req.body || {};
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
     const cleanUser = username.trim();
+    const resolvedSponsor = sponsor || uplineUser || null;
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const total = amountMitrons || 1000;
     const validation = validateCartTotal(Number(total) || 0);
@@ -226,7 +227,8 @@ app.post('/api/shop/pay', async (req, res) => {
                 hashId: hashId,
                 unitsCount: validation.unitsCount || validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
-                uplineUser: uplineUser || null
+                uplineUser: resolvedSponsor,
+                sponsor: resolvedSponsor
             })
         });
 
@@ -256,7 +258,7 @@ app.post('/api/shop/pay', async (req, res) => {
         });
 
         // Передаем точную сумму покупки для корректного расчета финансов Админа
-        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
+        const financeData = calculatePurchaseFinance(cleanUser, resolvedSponsor, validation.totalMitrons);
 
         return res.json({ 
             success: true, 
@@ -289,13 +291,14 @@ app.post('/api/cart/validate', (req, res) => {
 
 // API Мультипокупки
 app.post('/api/shop/checkout', async (req, res) => {
-    const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
+    const { username, totalMitrons, cartItems, uplineUser, sponsor } = req.body || {};
     
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: "Укажите логин покупателя" });
     }
 
     const cleanUser = username.trim();
+    const resolvedSponsor = sponsor || uplineUser || null;
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const validation = validateCartTotal(Number(totalMitrons) || 0);
 
@@ -328,7 +331,8 @@ app.post('/api/shop/checkout', async (req, res) => {
                 unitsCount: validation.unitsCount || validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
-                uplineUser: uplineUser || null
+                uplineUser: resolvedSponsor,
+                sponsor: resolvedSponsor
             })
         });
 
@@ -359,7 +363,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
             // Расчет с учетом полной суммы заказа
-            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
+            const financeData = calculatePurchaseFinance(cleanUser, resolvedSponsor, validation.totalMitrons);
             
             return res.json({ 
                 success: true, 
@@ -454,7 +458,7 @@ app.post('/api/shop/refund', async (req, res) => {
         message: "Отказ зафиксирован, средства возвращены в полном объеме.",
         refundedAmount: refundAmount,
         unitsCount: unitsToRefund,
-        accumulatedTotal: userPurchasesTotal[cleanUser] || 0
+        accumulatedTotal: userPurchasesTotal[cleanValue = cleanUser] || 0
     });
 });
 
