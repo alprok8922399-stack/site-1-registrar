@@ -459,7 +459,7 @@ app.post('/api/shop/refund', async (req, res) => {
 });
 
 // === СИМУЛЯЦИЯ ПРОХОЖДЕНИЯ 31 ДНЯ ДЛЯ ВСЕХ ЗАКАЗОВ (ВЫЗЫВАЕТСЯ ПРИ РАЗМОРОЗКЕ) ===
-app.post('/api/orders/simulate-31-days', (req, res) => {
+const handleSimulate31Days = (req, res) => {
     const pastTimestamp = Date.now() - (32 * 24 * 60 * 60 * 1000);
     const pastIsoDate = new Date(pastTimestamp).toISOString();
 
@@ -477,7 +477,10 @@ app.post('/api/orders/simulate-31-days', (req, res) => {
         message: `Симуляция 31 дня выполнена! Обновлено ${updatedOrdersCount} заказов.`,
         simulatedDate: pastIsoDate
     });
-});
+};
+
+app.post('/api/orders/simulate-31-days', handleSimulate31Days);
+app.post('/api/admin/simulate-31-days', handleSimulate31Days);
 
 // Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
 app.get('/api/shop/refund-stats', (req, res) => {
