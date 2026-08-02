@@ -191,8 +191,10 @@ async function processPayment() {
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
+    const sponsorInput = document.getElementById('sponsorInput');
 
     const username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
+    const sponsor = sponsorInput && sponsorInput.value.trim() ? sponsorInput.value.trim() : '';
 
     if (!username || username === 'Покупатель') {
         if (hint) {
@@ -216,6 +218,7 @@ async function processPayment() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: username,
+                sponsor: sponsor,
                 totalMitrons: totalM,
                 cartItems: cart
             })
