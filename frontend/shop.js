@@ -277,27 +277,54 @@ async function loadUserOrders() {
         if (data.success && data.orders && data.orders.length > 0) {
             ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
-                const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                const diffDays = Math.max(0, Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24)));
+                
+                const isRefundExpired = diffDays >= 31;
                 const isRefunded = order.status === 'REFUNDED';
+                const canRefund = !isRefundExpired && !isRefunded;
+                
                 const orderAmount = order.totalMitrons || order.amountMitrons || 1000;
+
+                let statusText = '✅ Оплачен';
+                let statusColor = '#2ecc71';
+
+                if (isRefunded) {
+                    statusText = '🚫 Возвращен';
+                    statusColor = '#e74c3c';
+                } else if (isRefundExpired) {
+                    statusText = '✅ Завершен (31 дн.)';
+                    statusColor = '#27ae60';
+                }
+
+                let actionButtonHtml = '';
+                if (isRefunded) {
+                    actionButtonHtml = '';
+                } else if (isRefundExpired) {
+                    actionButtonHtml = `
+                        <button disabled style="width:100%; padding:10px; background:#bdc3c7; color:#7f8c8d; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px;">
+                            Гарантийный срок (31 день) истек
+                        </button>
+                    `;
+                } else if (canRefund) {
+                    actionButtonHtml = `
+                        <button 
+                            onclick="refundOrder('${order.id || order._id}', ${orderAmount})" 
+                            style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                            🚫 Отказаться от покупки (Возврат)
+                        </button>
+                    `;
+                }
 
                 return `
                     <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <strong>Заказ #${order.id || order._id || '1'}</strong>
-                            <span style="font-size:12px; color:${isRefunded ? '#e74c3c' : '#2ecc71'}; font-weight:bold;">
-                                ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
+                            <span style="font-size:12px; color:${statusColor}; font-weight:bold;">
+                                ${statusText} (${diffDays} дн.)
                             </span>
                         </div>
                         <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${orderAmount} M</strong></div>
-                        ${canRefund ? `
-                            <button 
-                                onclick="refundOrder('${order.id || order._id}', ${orderAmount})" 
-                                style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
-                                🚫 Отказаться от покупки (Возврат)
-                            </button>
-                        ` : ''}
+                        ${actionButtonHtml}
                     </div>
                 `;
             }).join('');
