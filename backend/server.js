@@ -396,14 +396,14 @@ app.post('/api/shop/refund', async (req, res) => {
     // Ищем точный заказ в базе
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
     
-    // Проверка: прошел ли 31 день с момента покупки
+    // Проверка: прошел ли 33 дня с момента покупки
     if (targetOrder && targetOrder.createdAt) {
         const orderDate = new Date(targetOrder.createdAt).getTime();
         const daysPassed = (Date.now() - orderDate) / (1000 * 60 * 60 * 24);
-        if (daysPassed >= 31) {
+        if (daysPassed >= 33) {
             return res.status(400).json({
                 success: false,
-                error: "Отказ невозможен! Гарантийный период 31 день истек."
+                error: "Отказ невозможен! Гарантийный период 33 дня истек."
             });
         }
     }
@@ -458,13 +458,13 @@ app.post('/api/shop/refund', async (req, res) => {
         message: "Отказ зафиксирован, средства возвращены в полном объеме.",
         refundedAmount: refundAmount,
         unitsCount: unitsToRefund,
-        accumulatedTotal: userPurchasesTotal[cleanValue = cleanUser] || 0
+        accumulatedTotal: userPurchasesTotal[cleanUser] || 0
     });
 });
 
-// === СИМУЛЯЦИЯ ПРОХОЖДЕНИЯ 31 ДНЯ ДЛЯ ВСЕХ ЗАКАЗОВ (ВЫЗЫВАЕТСЯ ПРИ РАЗМОРОЗКЕ) ===
+// === СИМУЛЯЦИЯ ПРОХОЖДЕНИЯ 33 ДНЕЙ ДЛЯ ВСЕХ ЗАКАЗОВ (ВЫЗЫВАЕТСЯ ПРИ РАЗМОРОЗКЕ) ===
 const handleSimulate31Days = (req, res) => {
-    const pastTimestamp = Date.now() - (32 * 24 * 60 * 60 * 1000);
+    const pastTimestamp = Date.now() - (34 * 24 * 60 * 60 * 1000);
     const pastIsoDate = new Date(pastTimestamp).toISOString();
 
     let updatedOrdersCount = 0;
@@ -478,7 +478,7 @@ const handleSimulate31Days = (req, res) => {
 
     res.json({
         success: true,
-        message: `Симуляция 31 дня выполнена! Обновлено ${updatedOrdersCount} заказов.`,
+        message: `Симуляция 33 дней выполнена! Обновлено ${updatedOrdersCount} заказов.`,
         simulatedDate: pastIsoDate
     });
 };
