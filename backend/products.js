@@ -1,15 +1,22 @@
 /**
- * Модуль каталога товаров Маркетплейса (Сайт 1)
- * Проект: MITRON
+ * =========================================================
+ * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
+ * Файловый путь: site-1-registrar/backend/products.js
+ * Назначение: Модуль каталога товаров Маркетплейса и валидации корзины
  * Базовая валюта себестоимости: USDT ($)
  * Курс: 1000 Mitron (M) = 130 USDT (1 M = 0.13 USDT)
  * Правило цен: Минимальный коэффициент x2.2 с автоматической подтяжкой к "Потолку" цен
+ * Срок действия таймера отказников: 33 дня (31 день + 2 дня транзакционный буфер)
+ * =========================================================
  */
+
+const { calculateMitronPrice } = require('./services/aliexpress');
 
 const MIN_COEFFICIENT = 2.2;
 const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
+const REFUND_TIMER_DAYS = 33;       // Полный срок таймера возврата/отказа по ТЗ
 
-// Базовый каталог товаров (Расширенный список)
+// Базовый каталог товаров Маркетплейса
 const initialProducts = [
     {
         id: 1,
@@ -27,6 +34,7 @@ const initialProducts = [
         costUsdt: 65, 
         ceilingPriceUsdt: 160,
         isCertificate: false,
+        samplePricesUsdt: [58, 62, 65, 140, 155, 160, 165], // Анализ рынка AliExpress
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
     {
@@ -36,6 +44,7 @@ const initialProducts = [
         costUsdt: 32.5, 
         ceilingPriceUsdt: 85,
         isCertificate: false,
+        samplePricesUsdt: [30, 32.5, 35, 75, 82, 85, 90],
         image: "https://via.placeholder.com/300x200?text=Mitron+Hoodie"
     },
     {
@@ -45,6 +54,7 @@ const initialProducts = [
         costUsdt: 25, 
         ceilingPriceUsdt: 65,
         isCertificate: false,
+        samplePricesUsdt: [22, 25, 27, 58, 62, 65, 68],
         image: "https://via.placeholder.com/300x200?text=Mitron+Sound"
     },
     {
@@ -54,6 +64,7 @@ const initialProducts = [
         costUsdt: 15, 
         ceilingPriceUsdt: 45,
         isCertificate: false,
+        samplePricesUsdt: [12, 15, 17, 40, 42, 45, 48],
         image: "https://via.placeholder.com/300x200?text=Mitron+Wallet"
     },
     {
@@ -63,6 +74,7 @@ const initialProducts = [
         costUsdt: 18, 
         ceilingPriceUsdt: 42,
         isCertificate: false,
+        samplePricesUsdt: [15, 18, 20, 38, 40, 42, 45],
         image: "https://via.placeholder.com/300x200?text=Mitron+Bottle"
     },
     {
@@ -72,6 +84,7 @@ const initialProducts = [
         costUsdt: 10, 
         ceilingPriceUsdt: 28,
         isCertificate: false,
+        samplePricesUsdt: [8, 10, 12, 25, 27, 28, 30],
         image: "https://via.placeholder.com/300x200?text=Mitron+Cap"
     },
     {
@@ -81,6 +94,7 @@ const initialProducts = [
         costUsdt: 22, 
         ceilingPriceUsdt: 58,
         isCertificate: false,
+        samplePricesUsdt: [20, 22, 24, 52, 55, 58, 60],
         image: "https://via.placeholder.com/300x200?text=Mitron+PowerBank"
     }
 ];
@@ -97,12 +111,23 @@ function calculateRetailPriceMitrons(product) {
         };
     }
 
+    // Если у товара есть выборка цен AliExpress, считаем через сервис aliexpress.js
+    if (product.samplePricesUsdt && product.samplePricesUsdt.length >= 3) {
+        const aliCalc = calculateMitronPrice(product.samplePricesUsdt);
+        return {
+            priceMitrons: aliCalc.priceInMitrons,
+            finalUsdt: aliCalc.finalPriceUSD,
+            hasCeilingGap: aliCalc.hasStar
+        };
+    }
+
+    // Стандартный алгоритм-фоллбэк
     const minPriceUsdt = product.costUsdt * MIN_COEFFICIENT;
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
     const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
     
     // Пометка '*', если цена установлена по Потолку
-    const hasCeilingGap = (product.ceilingPriceUsdt / product.costUsdt) >= MIN_COEFFICIENT;
+    const hasCeilingGap = ((product.ceilingPriceUsdt || 0) / product.costUsdt) >= MIN_COEFFICIENT;
 
     return {
         priceMitrons: finalMitrons,
@@ -134,7 +159,8 @@ function getProductsCatalog() {
             priceMitrons: priceData.priceMitrons,
             coefficient: effectiveCoeff,
             hasStarMark: priceData.hasCeilingGap,
-            description: description
+            description: description,
+            guaranteeDays: REFUND_TIMER_DAYS
         };
     });
 }
@@ -177,7 +203,7 @@ function validateCartTotal(totalMitrons) {
         return { 
             valid: true, 
             unitsCount: unitsCount,
-            cellsCount: unitsCount, // Сохраняем совместимость
+            cellsCount: unitsCount,
             totalMitrons: totalMitrons, 
             targetBracket: targetBracket 
         };
@@ -191,7 +217,7 @@ function validateCartTotal(totalMitrons) {
         if (minNeeded === maxNeeded) {
             messageText = `Добавьте ${minNeeded} Митронов для покупки.`;
         } else {
-            messageText = `Добавьте ${minNeeded}–${maxNeeded} Митронов для покупки.`;
+            messageText = `Вам необходимо заполнить корзину ещё на ${minNeeded}–${maxNeeded} Митронов`;
         }
 
         return { 
@@ -210,5 +236,6 @@ module.exports = {
     getProductsCatalog,
     calculateRetailPriceMitrons,
     validateCartTotal,
-    suggestAddonProducts
+    suggestAddonProducts,
+    REFUND_TIMER_DAYS
 };
