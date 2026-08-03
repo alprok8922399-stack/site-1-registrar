@@ -7,10 +7,9 @@
  * Курс: 1000 Mitron (M) = 130 USDT (1 M = 0.13 USDT)
  * Правило цен: Минимальный коэффициент x2.2 с автоматической подтяжкой к "Потолку" цен
  * Срок действия таймера отказников: 33 дня (31 день + 2 дня транзакционный буфер)
+ * Соответствует регламенту ТЗ проекта «MITRON»
  * =========================================================
  */
-
-const { calculateMitronPrice } = require('./services/aliexpress');
 
 const MIN_COEFFICIENT = 2.2;
 const MITRON_PER_USDT = 1000 / 130; // ~7.6923 M за 1 USDT
@@ -34,7 +33,7 @@ const initialProducts = [
         costUsdt: 65, 
         ceilingPriceUsdt: 160,
         isCertificate: false,
-        samplePricesUsdt: [58, 62, 65, 140, 155, 160, 165], // Анализ рынка AliExpress
+        samplePricesUsdt: [58, 62, 65, 140, 155, 160, 165],
         image: "https://via.placeholder.com/300x200?text=Mitron+Watch"
     },
     {
@@ -111,17 +110,7 @@ function calculateRetailPriceMitrons(product) {
         };
     }
 
-    // Если у товара есть выборка цен AliExpress, считаем через сервис aliexpress.js
-    if (product.samplePricesUsdt && product.samplePricesUsdt.length >= 3) {
-        const aliCalc = calculateMitronPrice(product.samplePricesUsdt);
-        return {
-            priceMitrons: aliCalc.priceInMitrons,
-            finalUsdt: aliCalc.finalPriceUSD,
-            hasCeilingGap: aliCalc.hasStar
-        };
-    }
-
-    // Стандартный алгоритм-фоллбэк
+    // Стандартный алгоритм расчета цены
     const minPriceUsdt = product.costUsdt * MIN_COEFFICIENT;
     const finalUsdt = Math.max(minPriceUsdt, product.ceilingPriceUsdt || minPriceUsdt);
     const finalMitrons = Math.round(finalUsdt * MITRON_PER_USDT);
