@@ -148,7 +148,7 @@ function suggestAddonProducts(neededMitrons) {
 }
 
 /**
- * Валидатор Корзины Сайта 1 (Диапазоны 990-1000, 1990-2000, 2990-3000, 3990-4000, 4990-5000)
+ * Валидатор Корзины Сайта 1 с учетом разбега в 10 Митронов (Диапазоны 990-1000, 1990-2000, и т.д.)
  */
 function validateCartTotal(totalMitrons) {
     if (totalMitrons <= 0) {
@@ -182,13 +182,25 @@ function validateCartTotal(totalMitrons) {
             targetBracket: targetBracket 
         };
     } else {
-        const needed = Math.round(minAllowed - totalMitrons);
-        const addons = suggestAddonProducts(needed > 0 ? needed : 0);
+        const minNeeded = Math.max(0, minAllowed - totalMitrons);
+        const maxNeeded = targetBracket - totalMitrons;
+
+        const addons = suggestAddonProducts(maxNeeded);
+        
+        let messageText = "";
+        if (minNeeded === maxNeeded) {
+            messageText = `Добавьте ${minNeeded} Митронов для покупки.`;
+        } else {
+            messageText = `Добавьте ${minNeeded}–${maxNeeded} Митронов для покупки.`;
+        }
+
         return { 
             valid: false, 
-            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
+            message: messageText, 
             targetBracket: targetBracket,
-            needed: needed > 0 ? needed : 0,
+            minNeeded: minNeeded,
+            maxNeeded: maxNeeded,
+            needed: minNeeded,
             addons: addons
         };
     }
