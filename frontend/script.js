@@ -139,7 +139,7 @@ function updateCartUI() {
     validateCartUI(totalM);
 }
 
-// 5. Валидация корзины с учетом накопительного лимита (5000 M)
+// 5. Валидация корзины с учетом диапазонов (-10 M) и лимита (5000 M)
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -161,27 +161,23 @@ function validateCartUI(totalM) {
         return;
     }
 
-    const ranges = [
-        { min: 990, max: 1000 },
-        { min: 1990, max: 2000 },
-        { min: 2990, max: 3000 },
-        { min: 3990, max: 4000 },
-        { min: 4990, max: 5000 }
-    ];
+    const targetBracket = Math.ceil(totalM / 1000) * 1000;
+    const minAllowed = targetBracket - 10;
 
-    const match = ranges.find(r => totalM >= r.min && totalM <= r.max);
-
-    if (match) {
+    if (totalM >= minAllowed && totalM <= targetBracket) {
         hint.className = 'status-alert success';
         hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
         payBtn.disabled = false;
     } else {
-        let target = ranges.find(r => r.max >= totalM);
-        if (!target) target = ranges[ranges.length - 1];
+        const minNeeded = Math.max(0, minAllowed - totalM);
+        const maxNeeded = targetBracket - totalM;
 
-        const needMore = target.min - totalM;
         hint.className = 'status-alert warning';
-        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        if (minNeeded === maxNeeded) {
+            hint.innerText = `Вам необходимо заполнить корзину ещё на ${minNeeded} Митронов.`;
+        } else {
+            hint.innerText = `Вам необходимо заполнить корзину ещё на ${minNeeded}–${maxNeeded} Митронов.`;
+        }
         payBtn.disabled = true;
     }
 }
@@ -259,7 +255,7 @@ function getOrCreateOrdersContainer() {
     return container;
 }
 
-// 7. Управление заказами пользователя и отказ от покупок
+// 7. Управление заказами пользователя и отказ от покупок (33 дня)
 async function loadUserOrders() {
     const ordersContainer = getOrCreateOrdersContainer();
     const userInput = document.getElementById('usernameInput');
@@ -284,7 +280,7 @@ async function loadUserOrders() {
             ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                const canRefund = diffDays <= 33 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
 
                 return `
