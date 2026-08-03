@@ -1,7 +1,7 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок и работа с Роботом.
+ * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок (33 дня) и работа с Роботом.
  */
 
 const API_URL = '/api';
@@ -16,7 +16,52 @@ document.addEventListener('DOMContentLoaded', () => {
     loadUserOrders();
 });
 
-// Загрузка статистики по отказам (включая за 24 часа)
+// Вспомогательная функция модального окна вместо системного prompt()
+function requestUserLogin(currentVal = '') {
+    return new Promise((resolve) => {
+        let modal = document.getElementById('custom-login-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'custom-login-modal';
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.6); display: flex; align-items: center;
+                justify-content: center; z-index: 99999; font-family: sans-serif;
+            `;
+            modal.innerHTML = `
+                <div style="background: #fff; padding: 24px; border-radius: 12px; width: 300px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+                    <h3 style="margin-top:0; color:#333; font-size:18px;">Авторизация</h3>
+                    <p style="font-size:13px; color:#666; margin-bottom:15px;">Введите ваш логин:</p>
+                    <input type="text" id="custom-login-input" placeholder="Логин" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; outline: none; font-size:14px;">
+                    <button id="custom-login-btn" style="width: 100%; padding: 10px; background: #00b894; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size:14px;">Войти</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        } else {
+            modal.style.display = 'flex';
+        }
+
+        const input = document.getElementById('custom-login-input');
+        const btn = document.getElementById('custom-login-btn');
+        input.value = currentVal;
+        input.focus();
+
+        const handleSubmit = () => {
+            const login = input.value.trim();
+            if (login) {
+                modal.style.display = 'none';
+                btn.onclick = null;
+                resolve(login);
+            } else {
+                alert('Пожалуйста, введите логин!');
+            }
+        };
+
+        btn.onclick = handleSubmit;
+    });
+}
+
+// Загрузка статистики по отказам
 async function loadRefundStats() {
     try {
         const res = await fetch(`${API_URL}/shop/refund-stats`);
@@ -45,7 +90,6 @@ async function loadProducts() {
         if (res.ok) {
             catalog = await res.json();
         } else {
-            // Резервный расширенный список товаров
             catalog = [
                 { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
                 { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
@@ -109,7 +153,7 @@ function removeFromCart(index) {
     updateCartUI();
 }
 
-// 4. Отрисовка корзины и динамических проверок
+// 4. Отрисовка корзины
 function updateCartUI() {
     const badge = document.getElementById('cartBadge');
     const itemsContainer = document.getElementById('cartItems');
@@ -139,7 +183,7 @@ function updateCartUI() {
     validateCartUI(totalM);
 }
 
-// 5. Строгая валидация корзины (-10 M) по ТЗ с выводом нехватки
+// 5. Валидация корзины с выводом точного диапазонов (-10 M)
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -159,7 +203,6 @@ function validateCartUI(totalM) {
         return;
     }
 
-    // Допустимые диапазоны (погрешность до -10 M)
     const ranges = [
         { min: 990, max: 1000 },
         { min: 1990, max: 2000 },
@@ -178,9 +221,11 @@ function validateCartUI(totalM) {
         let target = ranges.find(r => r.max >= totalM);
         if (!target) target = ranges[ranges.length - 1];
 
-        const needMore = target.min - totalM;
+        const minNeed = target.min - totalM;
+        const maxNeed = target.max - totalM;
+
         hint.className = 'status-alert warning';
-        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        hint.innerText = `Добавьте товары ещё на ${minNeed}–${maxNeed} Митронов для покупки.`;
         payBtn.disabled = true;
     }
 }
@@ -193,15 +238,11 @@ async function processPayment() {
     const userInput = document.getElementById('usernameInput');
     const sponsorInput = document.getElementById('sponsorInput');
 
-    const username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
-    const sponsor = sponsorInput && sponsorInput.value.trim() ? sponsorInput.value.trim() : '';
+    let username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || '');
 
     if (!username || username === 'Покупатель') {
-        if (hint) {
-            hint.className = 'status-alert error';
-            hint.innerText = 'Пожалуйста, укажите ваш логин покупателя.';
-        }
-        return;
+        username = await requestUserLogin();
+        if (userInput) userInput.value = username;
     }
 
     localStorage.setItem('mitron_user', username);
@@ -218,7 +259,7 @@ async function processPayment() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: username,
-                sponsor: sponsor,
+                sponsor: sponsorInput && sponsorInput.value.trim() ? sponsorInput.value.trim() : '',
                 totalMitrons: totalM,
                 cartItems: cart
             })
@@ -247,7 +288,6 @@ async function processPayment() {
     }
 }
 
-// Вспомогательная функция поиска/создания контейнера для заказов
 function getOrCreateOrdersContainer() {
     let container = document.getElementById('userOrdersContainer');
     if (!container) {
@@ -260,7 +300,7 @@ function getOrCreateOrdersContainer() {
     return container;
 }
 
-// 7. Управление заказами пользователя и ОТОБРАЖЕНИЕ КНОПКИ ОТКАЗА
+// 7. Управление заказами пользователя и гарантийный срок 33 ДНЯ
 async function loadUserOrders() {
     const ordersContainer = getOrCreateOrdersContainer();
 
@@ -282,7 +322,8 @@ async function loadUserOrders() {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.max(0, Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24)));
                 
-                const isRefundExpired = diffDays >= 31;
+                // Гарантийный период — 33 дня!
+                const isRefundExpired = diffDays >= 33;
                 const isRefunded = order.status === 'REFUNDED';
                 const canRefund = !isRefundExpired && !isRefunded;
                 
@@ -295,7 +336,7 @@ async function loadUserOrders() {
                     statusText = '🚫 Возвращен';
                     statusColor = '#e74c3c';
                 } else if (isRefundExpired) {
-                    statusText = '✅ Завершен (31 дн.)';
+                    statusText = '✅ Завершен (33 дн.)';
                     statusColor = '#27ae60';
                 }
 
@@ -305,7 +346,7 @@ async function loadUserOrders() {
                 } else if (isRefundExpired) {
                     actionButtonHtml = `
                         <button disabled style="width:100%; padding:10px; background:#bdc3c7; color:#7f8c8d; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px;">
-                            Гарантийный срок (31 день) истек
+                            Гарантийный срок (33 дня) истек
                         </button>
                     `;
                 } else if (canRefund) {
@@ -384,9 +425,9 @@ function checkAuthStatus() {
     }
 }
 
-function handleAuthClick() {
-    const current = localStorage.getItem('mitron_user') || 'Покупатель';
-    const username = prompt('Введите ваш логин для входа:', current);
+async function handleAuthClick() {
+    const current = localStorage.getItem('mitron_user') || '';
+    const username = await requestUserLogin(current);
     if (username) {
         localStorage.setItem('mitron_user', username.trim());
         checkAuthStatus();
@@ -447,6 +488,6 @@ async function toggleBot(enable) {
     }
 }
 
-// Глобальные мосты для обработчиков событий
+// Глобальные мосты
 window.refundOrder = refundOrder;
 window.handleAuthClick = handleAuthClick;
