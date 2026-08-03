@@ -1,6 +1,11 @@
 /**
- * Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
- * Проект: MITRON
+ * =========================================================
+ * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
+ * Файловый путь: site-1-registrar/backend/server.js
+ * Назначение: Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
+ * Соответствует регламенту ТЗ проекта «MITRON»
+ * Срок действия таймера отказников/кешбэка: 33 дня
+ * =========================================================
  */
 
 const express = require('express');
@@ -9,7 +14,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { getProductsCatalog, validateCartTotal } = require('./products');
+const { getProductsCatalog, validateCartTotal, REFUND_TIMER_DAYS } = require('./products');
 const { calculatePurchaseFinance, logRefund, getRefundStats } = require('./finance');
 
 const app = express();
@@ -396,14 +401,14 @@ app.post('/api/shop/refund', async (req, res) => {
     // Ищем точный заказ в базе
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
     
-    // Проверка: прошел ли 33 дня с момента покупки
+    // Проверка: прошел ли 33 дня с момента покупки по ТЗ
     if (targetOrder && targetOrder.createdAt) {
         const orderDate = new Date(targetOrder.createdAt).getTime();
         const daysPassed = (Date.now() - orderDate) / (1000 * 60 * 60 * 24);
-        if (daysPassed >= 33) {
+        if (daysPassed >= REFUND_TIMER_DAYS) {
             return res.status(400).json({
                 success: false,
-                error: "Отказ невозможен! Гарантийный период 33 дня истек."
+                error: `Отказ невозможен! Гарантийный период ${REFUND_TIMER_DAYS} дня истек.`
             });
         }
     }
@@ -463,7 +468,7 @@ app.post('/api/shop/refund', async (req, res) => {
 });
 
 // === СИМУЛЯЦИЯ ПРОХОЖДЕНИЯ 33 ДНЕЙ ДЛЯ ВСЕХ ЗАКАЗОВ (ВЫЗЫВАЕТСЯ ПРИ РАЗМОРОЗКЕ) ===
-const handleSimulate31Days = (req, res) => {
+const handleSimulate33Days = (req, res) => {
     const pastTimestamp = Date.now() - (34 * 24 * 60 * 60 * 1000);
     const pastIsoDate = new Date(pastTimestamp).toISOString();
 
@@ -483,8 +488,11 @@ const handleSimulate31Days = (req, res) => {
     });
 };
 
-app.post('/api/orders/simulate-31-days', handleSimulate31Days);
-app.post('/api/admin/simulate-31-days', handleSimulate31Days);
+// Роуты симуляции 33 дней (с сохранением старых адресов для совместимости)
+app.post('/api/orders/simulate-33-days', handleSimulate33Days);
+app.post('/api/admin/simulate-33-days', handleSimulate33Days);
+app.post('/api/orders/simulate-31-days', handleSimulate33Days);
+app.post('/api/admin/simulate-31-days', handleSimulate33Days);
 
 // Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
 app.get('/api/shop/refund-stats', (req, res) => {
