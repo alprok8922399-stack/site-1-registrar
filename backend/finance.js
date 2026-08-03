@@ -26,7 +26,7 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
     
     // 1. Обязательства
     const systemReserve = 250 * unitsCount;                // Системный резерв под 100% кешбэк
-    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 31 день
+    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 33 дня
     
     const totalObligations = goodsCost + systemReserve + refReserveTotal;
     
@@ -61,12 +61,12 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
             adminNetProfit: adminNetProfit
         },
         paymentDate: new Date().toISOString(),
-        timerDays: 31 // 31-дневный таймер отмена/кешбэк
+        timerDays: 33 // 33-дневный таймер отмена/кешбэк
     };
 }
 
 /**
- * Регистрация отказа от покупки в течение 31 дня
+ * Регистрация отказа от покупки в течение 33 дней
  */
 function logRefund(username, amount = 1000) {
     const unitsCount = Math.max(1, Math.round(amount / 1000));
@@ -147,13 +147,13 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
     const activeBuyersSet = new Set(activePurchases.map(p => p.username));
 
     return {
-        totalMitrons: totalMitrons,                                 // Чистый приход (минус отмены)
+        totalMitrons: totalMitrons,                               // Чистый приход (минус отмены)
         logisticsTotal: logisticsTotal,                             // Затраты на товары MP
         buyersCount: activeBuyersSet.size,                          // Только реальные активные покупатели
         refusedTodayText: `${refundStats.refusedTodayUsers} чел. (${refundStats.refusedTodayUnits} яч.)`,
         refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.)`,
         cashbackPaid: 0,                                            // Кешбэк по акции
-        refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 31 день)
+        refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 33 дня)
         systemReserveTotal: systemReserveTotal,                     // Замороженный системный резерв под кешбэк
         daoPoolTotal: daoPoolTotal,                                 // Фонд DAO (10%)
         adminNetProfitTotal: adminNetProfitTotal,                   // Чистая прибыль Админа
