@@ -1,6 +1,9 @@
 /**
- * Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
- * Проект: MITRON
+ * =========================================================
+ * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
+ * Файловый путь: site-1-registrar/backend/server.js
+ * Назначение: Сервер моста и бизнес-логики (Маркетплейс)
+ * =========================================================
  */
 
 const express = require('express');
@@ -18,7 +21,7 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-// Хранилище накопленных покупок по логинам (для соблюдения лимита макс 5000 M на логин)
+// Хранилище накопленных покупок по логинам (макс 5000 M на логин)
 const userPurchasesTotal = {};
 const userOrdersStore = {};
 const userHashIds = {}; // Хранилище сгенерированных Hash-ID для Web3 DAO
@@ -255,8 +258,8 @@ app.post('/api/shop/pay', async (req, res) => {
             createdAt: new Date().toISOString()
         });
 
-        // Передаем точную сумму покупки для корректного расчета финансов Админа
-        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
+        // Расчет финансов с учетом наличия Лидера в ветке (Сайт 2 передает site2Data.hasBranchLeader)
+        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
 
         return res.json({ 
             success: true, 
@@ -358,8 +361,8 @@ app.post('/api/shop/checkout', async (req, res) => {
 
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
-            // Расчет с учетом полной суммы заказа
-            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
+            // Расчет с учетом наличия Лидера в ветке
+            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
             
             return res.json({ 
                 success: true, 
@@ -380,7 +383,7 @@ app.post('/api/shop/checkout', async (req, res) => {
     }
 });
 
-// Регистрация отказа от покупки и передача сигнала на Сайт 2
+// Регистрация отказа от покупки в течение 33 дней
 app.post('/api/shop/refund', async (req, res) => {
     const { username, orderId, amount } = req.body || {};
     if (!username) {
@@ -392,7 +395,6 @@ app.post('/api/shop/refund', async (req, res) => {
     // Ищем точный заказ в базе
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
     
-    // Если сумма передана — берем её, иначе берем сумму из заказа, иначе по дефолту 1000
     let refundAmount = Number(amount);
     if (!refundAmount || isNaN(refundAmount)) {
         if (targetOrder && targetOrder.totalMitrons) {
@@ -446,7 +448,7 @@ app.post('/api/shop/refund', async (req, res) => {
     });
 });
 
-// Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
+// Получение статистики по отказам
 app.get('/api/shop/refund-stats', (req, res) => {
     res.json({ success: true, stats: getRefundStats() });
 });
