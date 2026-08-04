@@ -9,6 +9,25 @@ let cart = [];
 let catalog = [];
 let userAccumulatedTotal = 0;
 
+// Вспомогательная функция для безопасных запросов с повторными попытками (защита от 502 Bad Gateway)
+async function fetchWithRetry(url, options = {}, retries = 3, delay = 3000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetch(url, options);
+            if (res.status === 502 || res.status === 503 || res.status === 504) {
+                if (i < retries - 1) {
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+            }
+            return res;
+        } catch (err) {
+            if (i === retries - 1) throw err;
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
+
 // 1. Старт инициализации
 document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
@@ -20,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // Загрузка статистики по отказам
 async function loadRefundStats() {
     try {
-        const res = await fetch(`${API_URL}/shop/refund-stats`);
+        const res = await fetchWithRetry(`${API_URL}/shop/refund-stats`);
         if (res.ok) {
             const data = await res.json();
             if (data.success && data.stats) {
@@ -42,7 +61,7 @@ async function loadProducts() {
     if (!grid) return;
 
     try {
-        const res = await fetch(`${API_URL}/products`);
+        const res = await fetchWithRetry(`${API_URL}/products`);
         if (res.ok) {
             catalog = await res.json();
         } else {
@@ -208,7 +227,7 @@ async function processPayment() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/shop/checkout`, {
+        const res = await fetchWithRetry(`${API_URL}/shop/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -267,7 +286,7 @@ async function loadUserOrders() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/shop/orders?username=${encodeURIComponent(username)}`);
+        const res = await fetchWithRetry(`${API_URL}/shop/orders?username=${encodeURIComponent(username)}`);
         if (!res.ok) throw new Error('Не удалось загрузить заказы');
 
         const data = await res.json();
@@ -322,7 +341,7 @@ async function refundOrder(orderId) {
     }
 
     try {
-        const res = await fetch(`${API_URL}/shop/refund`, {
+        const res = await fetchWithRetry(`${API_URL}/shop/refund`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, orderId })
@@ -386,7 +405,7 @@ async function fetchBotStatus() {
     if (statusLabel) statusLabel.innerText = 'Запрос к серверу...';
 
     try {
-        const res = await fetch(`${API_URL}/test-bot/status`);
+        const res = await fetchWithRetry(`${API_URL}/test-bot/status`);
         const data = await res.json();
 
         if (statusLabel) {
@@ -405,7 +424,7 @@ async function fetchBotStatus() {
 
 async function toggleBot(enable) {
     try {
-        await fetch(`${API_URL}/test-bot/${enable ? 'start' : 'stop'}`, { method: 'POST' });
+        await fetchWithRetry(`${API_URL}/test-bot/${enable ? 'start' : 'stop'}`, { method: 'POST' });
         fetchBotStatus();
     } catch (err) {
         console.error('Ошибка переключения генератора:', err);
