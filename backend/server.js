@@ -1,11 +1,6 @@
 /**
- * =========================================================
- * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
- * Файловый путь: site-1-registrar/backend/server.js
- * Назначение: Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
- * Соответствует регламенту ТЗ проекта «MITRON»
- * Срок действия таймера отказников/кешбэка: 33 дня
- * =========================================================
+ * Сервер моста и бизнес-логики (Сайт 1 — Маркетплейс)
+ * Проект: MITRON
  */
 
 const express = require('express');
@@ -14,7 +9,7 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { getProductsCatalog, validateCartTotal, REFUND_TIMER_DAYS } = require('./products');
+const { getProductsCatalog, validateCartTotal } = require('./products');
 const { calculatePurchaseFinance, logRefund, getRefundStats } = require('./finance');
 
 const app = express();
@@ -27,26 +22,6 @@ app.use(express.json());
 const userPurchasesTotal = {};
 const userOrdersStore = {};
 const userHashIds = {}; // Хранилище сгенерированных Hash-ID для Web3 DAO
-
-// Карта количества личников у ботов для умной расстановки рефералов
-const robotSponsorCounts = {
-    'SYSTEM_ROOT': 0
-};
-
-// Функция умного выбора спонсора для авто-ботов (до 15 личников на человека)
-function getSmartRobotSponsor() {
-    const MAX_DIRECT = 15;
-    if (robotSponsorCounts['SYSTEM_ROOT'] < MAX_DIRECT) {
-        return 'SYSTEM_ROOT';
-    }
-
-    const available = Object.keys(robotSponsorCounts).filter(u => robotSponsorCounts[u] < MAX_DIRECT);
-    if (available.length > 0) {
-        const randomIndex = Math.floor(Math.random() * available.length);
-        return available[randomIndex];
-    }
-    return 'SYSTEM_ROOT';
-}
 
 // Универсальное определение пути к папке frontend для Render
 function getFrontendPath() {
@@ -74,18 +49,6 @@ let liveLogs = [];
 // Адрес Сайта 2 на Render
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
-// Запрос с увеличенным таймаутом (по умолчанию 35 сек), чтобы "спящий" Сайт 2 успевал проснуться
-async function fetchWithTimeout(url, options = {}, timeoutMs = 35000) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-        const response = await fetch(url, { ...options, signal: controller.signal });
-        return response;
-    } finally {
-        clearTimeout(timer);
-    }
-}
-
 function logEvent(message) {
     liveLogs.push(message);
     if (liveLogs.length > 100) {
@@ -102,21 +65,8 @@ function getOrCreateHashId(username) {
     return userHashIds[username];
 }
 
-// Функция "прогрева" Сайта 2 перед заполнением порции
-async function warmupSite2() {
-    try {
-        logEvent('Прогрев сервера Дерева (Сайт 2)...');
-        await fetchWithTimeout(`${SITE2_URL}/`, { method: 'GET' }, 15000);
-        logEvent('Сайт 2 готов к приему заказов.');
-    } catch (err) {
-        logEvent('Сайт 2 просыпается, начинаем обработку...');
-    }
-}
-
 async function registerBatch(requestedBatchSize) {
     if (!isRobotRunning) return;
-
-    await warmupSite2();
 
     const batchSize = requestedBatchSize || Math.floor(Math.random() * 11) + 10;
     logEvent(`Старт порции: регистрируем ${batchSize} заказов...`);
@@ -127,42 +77,24 @@ async function registerBatch(requestedBatchSize) {
         try {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
-            const chosenSponsor = getSmartRobotSponsor();
 
-            const res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
+            const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    username: botName, 
-                    unitsCount: 1, 
-                    amountMitrons: 1000,
-                    uplineUser: chosenSponsor,
-                    sponsor: chosenSponsor
-                })
-            }, 35000);
-
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-                logEvent(`[${i + 1}/${batchSize}] Сайт 2 ещё перезагружается. Пропуск...`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                continue;
-            }
+                body: JSON.stringify({ username: botName, unitsCount: 1, amountMitrons: 1000 })
+            });
 
             const data = await res.json();
             if (data.success) {
-                robotSponsorCounts[chosenSponsor] = (robotSponsorCounts[chosenSponsor] || 0) + 1;
-                robotSponsorCounts[botName] = 0;
-                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ветку: ${chosenSponsor} (Ячейка: ${data.cellId || 'OK'})`);
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} оформил заказ`);
             } else {
                 logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Завершение обработки'}`);
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
-            // При ошибке делаем паузу чуть больше, дать серверу подгрузиться
-            await new Promise(resolve => setTimeout(resolve, 1500));
         }
 
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     if (isRobotRunning) {
@@ -256,13 +188,12 @@ app.get('/api/shop/user-purchases/:username', (req, res) => {
 
 // Оплата и покупка
 app.post('/api/shop/pay', async (req, res) => {
-    const { username, amountMitrons, uplineUser, sponsor } = req.body || {};
+    const { username, amountMitrons, uplineUser } = req.body || {};
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
     const cleanUser = username.trim();
-    const resolvedSponsor = sponsor || uplineUser || null;
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const total = amountMitrons || 1000;
     const validation = validateCartTotal(Number(total) || 0);
@@ -287,7 +218,7 @@ app.post('/api/shop/pay', async (req, res) => {
     const hashId = getOrCreateHashId(cleanUser);
 
     try {
-        const site2Res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
+        const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -295,16 +226,15 @@ app.post('/api/shop/pay', async (req, res) => {
                 hashId: hashId,
                 unitsCount: validation.unitsCount || validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
-                uplineUser: resolvedSponsor,
-                sponsor: resolvedSponsor
+                uplineUser: uplineUser || null
             })
-        }, 35000);
+        });
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
             return res.status(503).json({
                 success: false,
-                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите попытку через 10-15 секунд.'
+                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите нажатие кнопки "ОПЛАТИТЬ" через 10-15 секунд.'
             });
         }
 
@@ -326,7 +256,7 @@ app.post('/api/shop/pay', async (req, res) => {
         });
 
         // Передаем точную сумму покупки для корректного расчета финансов Админа
-        const financeData = calculatePurchaseFinance(cleanUser, resolvedSponsor, validation.totalMitrons);
+        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
 
         return res.json({ 
             success: true, 
@@ -339,9 +269,7 @@ app.post('/api/shop/pay', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ 
             success: false, 
-            error: err.name === 'AbortError'
-                ? 'Превышено время ожидания ответа от сервера дерева (Таймаут). Повторите попытку.'
-                : 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
         });
     }
 });
@@ -361,14 +289,13 @@ app.post('/api/cart/validate', (req, res) => {
 
 // API Мультипокупки
 app.post('/api/shop/checkout', async (req, res) => {
-    const { username, totalMitrons, cartItems, uplineUser, sponsor } = req.body || {};
+    const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
     
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: "Укажите логин покупателя" });
     }
 
     const cleanUser = username.trim();
-    const resolvedSponsor = sponsor || uplineUser || null;
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const validation = validateCartTotal(Number(totalMitrons) || 0);
 
@@ -392,7 +319,7 @@ app.post('/api/shop/checkout', async (req, res) => {
     const hashId = getOrCreateHashId(cleanUser);
 
     try {
-        const site2Res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
+        const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -401,10 +328,9 @@ app.post('/api/shop/checkout', async (req, res) => {
                 unitsCount: validation.unitsCount || validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
-                uplineUser: resolvedSponsor,
-                sponsor: resolvedSponsor
+                uplineUser: uplineUser || null
             })
-        }, 35000);
+        });
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
@@ -433,7 +359,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
             // Расчет с учетом полной суммы заказа
-            const financeData = calculatePurchaseFinance(cleanUser, resolvedSponsor, validation.totalMitrons);
+            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons);
             
             return res.json({ 
                 success: true, 
@@ -449,9 +375,7 @@ app.post('/api/shop/checkout', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ 
             success: false, 
-            error: err.name === 'AbortError' 
-                ? 'Превышено время ожидания ответа от сервера дерева (Таймаут). Повторите попытку.' 
-                : 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
         });
     }
 });
@@ -467,18 +391,6 @@ app.post('/api/shop/refund', async (req, res) => {
     
     // Ищем точный заказ в базе
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
-    
-    // Проверка: прошел ли 33 дня с момента покупки по ТЗ
-    if (targetOrder && targetOrder.createdAt) {
-        const orderDate = new Date(targetOrder.createdAt).getTime();
-        const daysPassed = (Date.now() - orderDate) / (1000 * 60 * 60 * 24);
-        if (daysPassed >= REFUND_TIMER_DAYS) {
-            return res.status(400).json({
-                success: false,
-                error: `Отказ невозможен! Гарантийный период ${REFUND_TIMER_DAYS} дня истек.`
-            });
-        }
-    }
     
     // Если сумма передана — берем её, иначе берем сумму из заказа, иначе по дефолту 1000
     let refundAmount = Number(amount);
@@ -496,7 +408,7 @@ app.post('/api/shop/refund', async (req, res) => {
 
     // Передаем точное количество единиц на Сайт 2
     try {
-        await fetchWithTimeout(`${SITE2_URL}/api/admin/refund-user`, {
+        await fetch(`${SITE2_URL}/api/admin/refund-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -505,7 +417,7 @@ app.post('/api/shop/refund', async (req, res) => {
                 amount: refundAmount,
                 unitsCount: unitsToRefund
             })
-        }, 15000);
+        });
     } catch (e) {
         console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
     }
@@ -534,34 +446,7 @@ app.post('/api/shop/refund', async (req, res) => {
     });
 });
 
-// === СИМУЛЯЦИЯ ПРОХОЖДЕНИЯ 33 ДНЕЙ ДЛЯ ВСЕХ ЗАКАЗОВ (ВЫЗЫВАЕТСЯ ПРИ РАЗМОРОЗКЕ) ===
-const handleSimulate33Days = (req, res) => {
-    const pastTimestamp = Date.now() - (34 * 24 * 60 * 60 * 1000);
-    const pastIsoDate = new Date(pastTimestamp).toISOString();
-
-    let updatedOrdersCount = 0;
-
-    Object.keys(userOrdersStore).forEach(username => {
-        userOrdersStore[username].forEach(order => {
-            order.createdAt = pastIsoDate;
-            updatedOrdersCount++;
-        });
-    });
-
-    res.json({
-        success: true,
-        message: `Симуляция 33 дней выполнена! Обновлено ${updatedOrdersCount} заказов.`,
-        simulatedDate: pastIsoDate
-    });
-};
-
-// Роуты симуляции 33 дней
-app.post('/api/orders/simulate-33-days', handleSimulate33Days);
-app.post('/api/admin/simulate-33-days', handleSimulate33Days);
-app.post('/api/orders/simulate-31-days', handleSimulate33Days);
-app.post('/api/admin/simulate-31-days', handleSimulate33Days);
-
-// Получение статистики по отказам
+// Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
 app.get('/api/shop/refund-stats', (req, res) => {
     res.json({ success: true, stats: getRefundStats() });
 });
