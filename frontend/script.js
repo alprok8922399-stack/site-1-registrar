@@ -1,7 +1,11 @@
 /**
- * Фронтенд-скрипт Маркетплейса (Сайт 1)
- * Проект: MITRON
- * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок и работа с Роботом.
+ * =========================================================
+ * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
+ * Файловый путь: site-1-registrar/frontend/script.js
+ * Назначение: Фронтенд-скрипт Маркетплейса
+ * Управление витриной, корзиной, валидация диапазонов (-10 M),
+ * отказ от покупок (33 дня) и работа с Роботом.
+ * =========================================================
  */
 
 const API_URL = '/api';
@@ -139,7 +143,7 @@ function updateCartUI() {
     validateCartUI(totalM);
 }
 
-// 5. Валидация корзины с учетом накопительного лимита (5000 M)
+// 5. Валидация корзины с учетом накопительного лимита (5000 M) и отображением разрыва (-10 M)
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -179,14 +183,21 @@ function validateCartUI(totalM) {
         let target = ranges.find(r => r.max >= totalM);
         if (!target) target = ranges[ranges.length - 1];
 
-        const needMore = target.min - totalM;
+        // Точный расчет разрыва в 10 M
+        const diffMin = target.min - totalM;
+        const diffMax = target.max - totalM;
+
         hint.className = 'status-alert warning';
-        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        if (diffMin === diffMax) {
+            hint.innerText = `Вам необходимо заполнить корзину ещё на ${diffMin} Митронов.`;
+        } else {
+            hint.innerText = `Вам необходимо заполнить корзину ещё на ${diffMin}–${diffMax} Митронов.`;
+        }
         payBtn.disabled = true;
     }
 }
 
-// 6. Оплата заказа
+// 6. Оплата заказа с защитой от зависания
 async function processPayment() {
     const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
     const payBtn = document.getElementById('payBtn');
@@ -211,10 +222,14 @@ async function processPayment() {
         hint.innerText = 'Обработка платежа и создание заказа...';
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд таймаут
+
     try {
         const res = await fetch(`${API_URL}/shop/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
             body: JSON.stringify({
                 username: username,
                 totalMitrons: totalM,
@@ -222,6 +237,7 @@ async function processPayment() {
             })
         });
 
+        clearTimeout(timeoutId);
         const data = await res.json();
 
         if (res.ok && data.success) {
@@ -238,10 +254,16 @@ async function processPayment() {
             throw new Error(data.error || 'Ошибка при проведении оплаты');
         }
     } catch (err) {
+        clearTimeout(timeoutId);
         if (hint) {
             hint.className = 'status-alert error';
-            hint.innerText = `Ошибка: ${err.message}`;
+            if (err.name === 'AbortError') {
+                hint.innerText = 'Превышено время ожидания сервера. Попробуйте еще раз.';
+            } else {
+                hint.innerText = `Ошибка: ${err.message}`;
+            }
         }
+    } finally {
         if (payBtn) payBtn.disabled = false;
     }
 }
@@ -259,7 +281,7 @@ function getOrCreateOrdersContainer() {
     return container;
 }
 
-// 7. Управление заказами пользователя и отказ от покупок
+// 7. Управление заказами пользователя и отказ от покупок (33 дня)
 async function loadUserOrders() {
     const ordersContainer = getOrCreateOrdersContainer();
     const userInput = document.getElementById('usernameInput');
@@ -284,7 +306,8 @@ async function loadUserOrders() {
             ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                // Ровно 33 дня отказного периода
+                const canRefund = diffDays <= 33 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
 
                 return `
