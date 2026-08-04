@@ -1,6 +1,10 @@
 /**
- * Модуль финансовой логики, отчислений и статистики (Сайт 1)
+ * =========================================================
+ * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
+ * Файловый путь: site-1-registrar/backend/finance.js
+ * Назначение: Модуль финансовой логики, отчислений и статистики
  * Соответствует регламенту ТЗ проекта «MITRON»
+ * =========================================================
  */
 
 // Хранилище логов отказов в памяти
@@ -14,9 +18,9 @@ const refundLogs = [];
  * -----------------------------------------------------
  * Базовый остаток = Входящая сумма - Обязательства
  * Фонд DAO (10% от базового остатка)
- * Чистая прибыль Администратора (90% от базового остатка)
+ * Чистая прибыль Администратора (90% от базового остатка minus 10M Лидерских)
  */
-function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null) {
+function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null, hasBranchLeader = false) {
     const totalAmount = Number(totalMitronsInput) || 1000;
     const unitsCount = Math.max(1, Math.round(totalAmount / 1000));
     
@@ -24,21 +28,25 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
     const maxAllowedGoodsCost = 450 * unitsCount;
     const goodsCost = actualGoodsCostInput !== null ? Math.min(actualGoodsCostInput, maxAllowedGoodsCost) : maxAllowedGoodsCost;
     
-    // 1. Обязательства
-    const systemReserve = 250 * unitsCount;                // Системный резерв под 100% кешбэк
-    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 31 день
+    // 1. Фиксированные обязательства
+    const systemReserve = 250 * unitsCount;               // Системный резерв под 100% кешбэк
+    const refReserveTotal = 70 * unitsCount;              // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 33 дня
     
     const totalObligations = goodsCost + systemReserve + refReserveTotal;
     
-    // 2. Расчет базового остатка
+    // 2. Расчет базового остатка (включая экономию при дешевом закупе)
     const baseRemainder = Math.max(0, totalAmount - totalObligations);
     
-    // 3. Распределения из остатка
-    const daoFundShare = Math.round(baseRemainder * 0.10);  // 10% в DAO
-    const adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу
+    // 3. Распределения из базового остатка
+    const daoFundShare = Math.round(baseRemainder * 0.10); // 10% в DAO
+    let adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу
     
-    // В Выплатной кошелек уходит: Товары + Резерв + Реферальные + DAO
-    const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + daoFundShare;
+    // Вычет Лидерского бонуса с ветки (10 M за каждые 1000 M) из прибыли Админа
+    const leaderBonus = hasBranchLeader ? (10 * unitsCount) : 0;
+    adminNetProfit = Math.max(0, adminNetProfit - leaderBonus);
+
+    // В Выплатной кошелек уходит: Товары + Резерв + Реферальные + DAO + Лидерские
+    const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + daoFundShare + leaderBonus;
 
     return {
         success: true,
@@ -57,16 +65,17 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
                 level3: 10 * unitsCount,
                 total: refReserveTotal
             },
+            leaderBonus: leaderBonus,
             daoPool: daoFundShare,
             adminNetProfit: adminNetProfit
         },
         paymentDate: new Date().toISOString(),
-        timerDays: 31 // 31-дневный таймер отмена/кешбэк
+        timerDays: 33 // 33-дневный таймер отмена/кешбэк
     };
 }
 
 /**
- * Регистрация отказа от покупки в течение 31 дня
+ * Регистрация отказа от покупки в течение 33 дней
  */
 function logRefund(username, amount = 1000) {
     const unitsCount = Math.max(1, Math.round(amount / 1000));
@@ -131,7 +140,7 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
     let totalActiveUnits = 0;
 
     activePurchases.forEach(p => {
-        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost);
+        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost, p.hasBranchLeader);
         totalMitrons += finData.totalMitrons;
         logisticsTotal += finData.distribution.logisticsMitrons;
         systemReserveTotal += finData.distribution.systemReserve;
@@ -153,7 +162,7 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
         refusedTodayText: `${refundStats.refusedTodayUsers} чел. (${refundStats.refusedTodayUnits} яч.)`,
         refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.)`,
         cashbackPaid: 0,                                            // Кешбэк по акции
-        refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 31 день)
+        refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 33 дня)
         systemReserveTotal: systemReserveTotal,                     // Замороженный системный резерв под кешбэк
         daoPoolTotal: daoPoolTotal,                                 // Фонд DAO (10%)
         adminNetProfitTotal: adminNetProfitTotal,                   // Чистая прибыль Админа
