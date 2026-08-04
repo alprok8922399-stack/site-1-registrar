@@ -1,11 +1,6 @@
 /**
- * =========================================================
- * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
- * Файловый путь: site-1-registrar/backend/finance.js
- * Назначение: Модуль финансовой логики, отчислений и статистики
+ * Модуль финансовой логики, отчислений и статистики (Сайт 1)
  * Соответствует регламенту ТЗ проекта «MITRON»
- * Срок действия таймера отказников/кешбэка: 33 дня
- * =========================================================
  */
 
 // Хранилище логов отказов в памяти
@@ -17,7 +12,7 @@ const refundLogs = [];
  * - Системный резерв под кешбэк 100%: 250 M за каждые 1000 M
  * - Замороженные реферальные вознаграждения: 70 M (50+10+10) за каждые 1000 M
  * -----------------------------------------------------
- * Базовый остаток = 1000 - X - 250 - 70 (где X — цена товара на МП)
+ * Базовый остаток = Входящая сумма - Обязательства
  * Фонд DAO (10% от базового остатка)
  * Чистая прибыль Администратора (90% от базового остатка)
  */
@@ -29,18 +24,18 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
     const maxAllowedGoodsCost = 450 * unitsCount;
     const goodsCost = actualGoodsCostInput !== null ? Math.min(actualGoodsCostInput, maxAllowedGoodsCost) : maxAllowedGoodsCost;
     
-    // 1. Фиксированные обязательства
+    // 1. Обязательства
     const systemReserve = 250 * unitsCount;                // Системный резерв под 100% кешбэк
-    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 33 дня
+    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 31 день
     
     const totalObligations = goodsCost + systemReserve + refReserveTotal;
     
-    // 2. Расчет базового остатка (Динамический остаток)
+    // 2. Расчет базового остатка
     const baseRemainder = Math.max(0, totalAmount - totalObligations);
     
-    // 3. Распределения из базового остатка
-    const daoFundShare = Math.round(baseRemainder * 0.10); // 10% в Фонд DAO
-    const adminNetProfit = baseRemainder - daoFundShare;     // 90% Чистая прибыль Администратора
+    // 3. Распределения из остатка
+    const daoFundShare = Math.round(baseRemainder * 0.10);  // 10% в DAO
+    const adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу
     
     // В Выплатной кошелек уходит: Товары + Резерв + Реферальные + DAO
     const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + daoFundShare;
@@ -52,26 +47,26 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
         totalMitrons: totalAmount,
         unitsCount: unitsCount,
         distribution: {
-            adminWalletMitrons: totalAmount,         // Первично 100% всей суммы заходит в Кошелек Админа
-            payoutWalletMitrons: payoutWalletTotal,  // Переводится в Выплатной шлюз
-            logisticsMitrons: goodsCost,             // Выкуп товара
-            systemReserve: systemReserve,            // Резерв Лидеру
+            adminWalletMitrons: totalAmount, // Первично 100% всей суммы заходит в Кошелек Админа
+            payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз
+            logisticsMitrons: goodsCost,
+            systemReserve: systemReserve,
             refReserve: {
                 level1: 50 * unitsCount,
                 level2: 10 * unitsCount,
                 level3: 10 * unitsCount,
                 total: refReserveTotal
             },
-            daoPool: daoFundShare,                  // 10% DAO
-            adminNetProfit: adminNetProfit          // Чистая прибыль Админа
+            daoPool: daoFundShare,
+            adminNetProfit: adminNetProfit
         },
         paymentDate: new Date().toISOString(),
-        timerDays: 33                                // 33-дневный таймер отмена/кешбэк по ТЗ
+        timerDays: 31 // 31-дневный таймер отмена/кешбэк
     };
 }
 
 /**
- * Регистрация отказа от покупки в течение 33 дней
+ * Регистрация отказа от покупки в течение 31 дня
  */
 function logRefund(username, amount = 1000) {
     const unitsCount = Math.max(1, Math.round(amount / 1000));
@@ -152,18 +147,18 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
     const activeBuyersSet = new Set(activePurchases.map(p => p.username));
 
     return {
-        totalMitrons: totalMitrons,                              // Чистый приход (минус отмены)
-        logisticsTotal: logisticsTotal,                          // Затраты на товары MP
-        buyersCount: activeBuyersSet.size,                        // Только реальные активные покупатели
+        totalMitrons: totalMitrons,                                 // Чистый приход (минус отмены)
+        logisticsTotal: logisticsTotal,                             // Затраты на товары MP
+        buyersCount: activeBuyersSet.size,                          // Только реальные активные покупатели
         refusedTodayText: `${refundStats.refusedTodayUsers} чел. (${refundStats.refusedTodayUnits} яч.)`,
         refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.)`,
-        cashbackPaid: 0,                                         // Кешбэк по акции
-        refReserveTotal: refReserveTotal,                        // Замороженный резерв реферальных (на 33 дня)
-        systemReserveTotal: systemReserveTotal,                  // Замороженный системный резерв под кешбэк
-        daoPoolTotal: daoPoolTotal,                              // Фонд DAO (10%)
-        adminNetProfitTotal: adminNetProfitTotal,                // Чистая прибыль Админа
+        cashbackPaid: 0,                                            // Кешбэк по акции
+        refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 31 день)
+        systemReserveTotal: systemReserveTotal,                     // Замороженный системный резерв под кешбэк
+        daoPoolTotal: daoPoolTotal,                                 // Фонд DAO (10%)
+        adminNetProfitTotal: adminNetProfitTotal,                   // Чистая прибыль Админа
         totalMatrixSlots: totalActiveUnits + refundStats.totalUnitsRefused, // Всего ячеек в структуре (активные + отказники Админа)
-        adminLoginsCount: 1,                                     // Логин системного админа
+        adminLoginsCount: 1,                                        // Логин системного админа
         buyerLoginsCount: activeBuyersSet.size
     };
 }
