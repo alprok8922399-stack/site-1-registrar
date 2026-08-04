@@ -74,8 +74,8 @@ let liveLogs = [];
 // Адрес Сайта 2 на Render
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
-// Запрос с таймаутом, чтобы сервер не вис при "спящем" Сайте 2
-async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+// Запрос с увеличенным таймаутом (по умолчанию 35 сек), чтобы "спящий" Сайт 2 успевал проснуться
+async function fetchWithTimeout(url, options = {}, timeoutMs = 35000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -102,8 +102,21 @@ function getOrCreateHashId(username) {
     return userHashIds[username];
 }
 
+// Функция "прогрева" Сайта 2 перед заполнением порции
+async function warmupSite2() {
+    try {
+        logEvent('Прогрев сервера Дерева (Сайт 2)...');
+        await fetchWithTimeout(`${SITE2_URL}/`, { method: 'GET' }, 15000);
+        logEvent('Сайт 2 готов к приему заказов.');
+    } catch (err) {
+        logEvent('Сайт 2 просыпается, начинаем обработку...');
+    }
+}
+
 async function registerBatch(requestedBatchSize) {
     if (!isRobotRunning) return;
+
+    await warmupSite2();
 
     const batchSize = requestedBatchSize || Math.floor(Math.random() * 11) + 10;
     logEvent(`Старт порции: регистрируем ${batchSize} заказов...`);
@@ -126,7 +139,14 @@ async function registerBatch(requestedBatchSize) {
                     uplineUser: chosenSponsor,
                     sponsor: chosenSponsor
                 })
-            }, 8000);
+            }, 35000);
+
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                logEvent(`[${i + 1}/${batchSize}] Сайт 2 ещё перезагружается. Пропуск...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                continue;
+            }
 
             const data = await res.json();
             if (data.success) {
@@ -138,9 +158,11 @@ async function registerBatch(requestedBatchSize) {
             }
         } catch (err) {
             logEvent(`Ошибка сети: ${err.message}`);
+            // При ошибке делаем паузу чуть больше, дать серверу подгрузиться
+            await new Promise(resolve => setTimeout(resolve, 1500));
         }
 
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     if (isRobotRunning) {
@@ -276,7 +298,7 @@ app.post('/api/shop/pay', async (req, res) => {
                 uplineUser: resolvedSponsor,
                 sponsor: resolvedSponsor
             })
-        }, 10000);
+        }, 35000);
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
@@ -382,7 +404,7 @@ app.post('/api/shop/checkout', async (req, res) => {
                 uplineUser: resolvedSponsor,
                 sponsor: resolvedSponsor
             })
-        }, 10000);
+        }, 35000);
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
@@ -483,7 +505,7 @@ app.post('/api/shop/refund', async (req, res) => {
                 amount: refundAmount,
                 unitsCount: unitsToRefund
             })
-        }, 8000);
+        }, 15000);
     } catch (e) {
         console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
     }
