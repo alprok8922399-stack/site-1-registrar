@@ -28,6 +28,26 @@ const userPurchasesTotal = {};
 const userOrdersStore = {};
 const userHashIds = {}; // Хранилище сгенерированных Hash-ID для Web3 DAO
 
+// Карта количества личников у ботов для умной расстановки рефералов
+const robotSponsorCounts = {
+    'SYSTEM_ROOT': 0
+};
+
+// Функция умного выбора спонсора для авто-ботов (до 15 личников на человека)
+function getSmartRobotSponsor() {
+    const MAX_DIRECT = 15;
+    if (robotSponsorCounts['SYSTEM_ROOT'] < MAX_DIRECT) {
+        return 'SYSTEM_ROOT';
+    }
+
+    const available = Object.keys(robotSponsorCounts).filter(u => robotSponsorCounts[u] < MAX_DIRECT);
+    if (available.length > 0) {
+        const randomIndex = Math.floor(Math.random() * available.length);
+        return available[randomIndex];
+    }
+    return 'SYSTEM_ROOT';
+}
+
 // Универсальное определение пути к папке frontend для Render
 function getFrontendPath() {
     const possiblePaths = [
@@ -82,16 +102,25 @@ async function registerBatch(requestedBatchSize) {
         try {
             const botNumber = Math.floor(1000 + Math.random() * 9000);
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
+            const chosenSponsor = getSmartRobotSponsor();
 
             const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: botName, unitsCount: 1, amountMitrons: 1000 })
+                body: JSON.stringify({ 
+                    username: botName, 
+                    unitsCount: 1, 
+                    amountMitrons: 1000,
+                    uplineUser: chosenSponsor,
+                    sponsor: chosenSponsor
+                })
             });
 
             const data = await res.json();
             if (data.success) {
-                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} оформил заказ`);
+                robotSponsorCounts[chosenSponsor] = (robotSponsorCounts[chosenSponsor] || 0) + 1;
+                robotSponsorCounts[botName] = 0;
+                logEvent(`[${i + 1}/${batchSize}] Бот ${botName} встал в ветку: ${chosenSponsor} (Ячейка: ${data.cellId || 'OK'})`);
             } else {
                 logEvent(`[${i + 1}/${batchSize}] Ошибка: ${data.error || 'Завершение обработки'}`);
             }
