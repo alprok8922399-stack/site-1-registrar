@@ -74,6 +74,18 @@ let liveLogs = [];
 // Адрес Сайта 2 на Render
 const SITE2_URL = 'https://site-2-tree.onrender.com';
 
+// Запрос с таймаутом, чтобы сервер не вис при "спящем" Сайте 2
+async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
+        return response;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 function logEvent(message) {
     liveLogs.push(message);
     if (liveLogs.length > 100) {
@@ -104,7 +116,7 @@ async function registerBatch(requestedBatchSize) {
             const botName = `AutoBot_${Date.now().toString().slice(-4)}_${botNumber}`;
             const chosenSponsor = getSmartRobotSponsor();
 
-            const res = await fetch(`${SITE2_URL}/api/shop/register`, {
+            const res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -114,7 +126,7 @@ async function registerBatch(requestedBatchSize) {
                     uplineUser: chosenSponsor,
                     sponsor: chosenSponsor
                 })
-            });
+            }, 8000);
 
             const data = await res.json();
             if (data.success) {
@@ -253,7 +265,7 @@ app.post('/api/shop/pay', async (req, res) => {
     const hashId = getOrCreateHashId(cleanUser);
 
     try {
-        const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
+        const site2Res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -264,13 +276,13 @@ app.post('/api/shop/pay', async (req, res) => {
                 uplineUser: resolvedSponsor,
                 sponsor: resolvedSponsor
             })
-        });
+        }, 10000);
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
             return res.status(503).json({
                 success: false,
-                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите нажатие кнопки "ОПЛАТИТЬ" через 10-15 секунд.'
+                error: 'Сервер обработки заказов просыпается. Пожалуйста, повторите попытку через 10-15 секунд.'
             });
         }
 
@@ -305,7 +317,9 @@ app.post('/api/shop/pay', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ 
             success: false, 
-            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+            error: err.name === 'AbortError'
+                ? 'Превышено время ожидания ответа от сервера дерева (Таймаут). Повторите попытку.'
+                : 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
         });
     }
 });
@@ -356,7 +370,7 @@ app.post('/api/shop/checkout', async (req, res) => {
     const hashId = getOrCreateHashId(cleanUser);
 
     try {
-        const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
+        const site2Res = await fetchWithTimeout(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -368,7 +382,7 @@ app.post('/api/shop/checkout', async (req, res) => {
                 uplineUser: resolvedSponsor,
                 sponsor: resolvedSponsor
             })
-        });
+        }, 10000);
 
         const contentType = site2Res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {
@@ -413,7 +427,9 @@ app.post('/api/shop/checkout', async (req, res) => {
     } catch (err) {
         return res.status(500).json({ 
             success: false, 
-            error: 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
+            error: err.name === 'AbortError' 
+                ? 'Превышено время ожидания ответа от сервера дерева (Таймаут). Повторите попытку.' 
+                : 'Временная задержка связи с сервером. Пожалуйста, повторите попытку через несколько секунд.' 
         });
     }
 });
@@ -458,7 +474,7 @@ app.post('/api/shop/refund', async (req, res) => {
 
     // Передаем точное количество единиц на Сайт 2
     try {
-        await fetch(`${SITE2_URL}/api/admin/refund-user`, {
+        await fetchWithTimeout(`${SITE2_URL}/api/admin/refund-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -467,7 +483,7 @@ app.post('/api/shop/refund', async (req, res) => {
                 amount: refundAmount,
                 unitsCount: unitsToRefund
             })
-        });
+        }, 8000);
     } catch (e) {
         console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
     }
@@ -517,13 +533,13 @@ const handleSimulate33Days = (req, res) => {
     });
 };
 
-// Роуты симуляции 33 дней (с сохранением старых адресов для совместимости)
+// Роуты симуляции 33 дней
 app.post('/api/orders/simulate-33-days', handleSimulate33Days);
 app.post('/api/admin/simulate-33-days', handleSimulate33Days);
 app.post('/api/orders/simulate-31-days', handleSimulate33Days);
 app.post('/api/admin/simulate-31-days', handleSimulate33Days);
 
-// Получение статистики по отказам (включая СЕГОДНЯ за 24 часа)
+// Получение статистики по отказам
 app.get('/api/shop/refund-stats', (req, res) => {
     res.json({ success: true, stats: getRefundStats() });
 });
