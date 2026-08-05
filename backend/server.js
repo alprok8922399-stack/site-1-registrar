@@ -68,6 +68,21 @@ function getOrCreateHashId(username) {
     return userHashIds[username];
 }
 
+// Формирование текста ошибки корзины с разрывом в 10 M (согласно ТЗ)
+function formatCartErrorMessage(currentTotal) {
+    const targets = [1000, 2000, 3000, 4000, 5000];
+    const nextTarget = targets.find(t => t > currentTotal) || 1000;
+    
+    const minNeeded = nextTarget - 10 - currentTotal; // с учетом допуска -10 M
+    const maxNeeded = nextTarget - currentTotal;
+    
+    if (minNeeded <= 0) {
+        return `Необходимо скорректировать корзину до кратной суммы (1000, 2000, 3000, 4000 или 5000 M).`;
+    }
+    
+    return `Вам необходимо заполнить корзину ещё на ${minNeeded}–${maxNeeded} Митронов.`;
+}
+
 async function registerBatch(requestedBatchSize) {
     if (!isRobotRunning) return;
 
@@ -189,7 +204,7 @@ app.get('/api/shop/user-purchases/:username', (req, res) => {
     });
 });
 
-// Оплата и покупка
+// Оплата и покупка одиночного товара
 app.post('/api/shop/pay', async (req, res) => {
     const { username, amountMitrons, uplineUser, sponsor } = req.body || {};
     if (!username || !username.trim()) {
@@ -199,23 +214,23 @@ app.post('/api/shop/pay', async (req, res) => {
     const cleanUser = username.trim();
     const cleanSponsor = (sponsor || uplineUser || '').trim();
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
-    const total = amountMitrons || 1000;
-    const validation = validateCartTotal(Number(total) || 0);
+    const total = Number(amountMitrons) || 1000;
+    const validation = validateCartTotal(total);
 
     if (!validation.valid) {
         return res.status(400).json({ 
             success: false, 
-            error: validation.message,
+            error: formatCartErrorMessage(total),
             addons: validation.addons || []
         });
     }
 
-    // Жесткая проверка накопительного лимита в 5000 M
+    // Жесткая проверка накопительного лимита в 5000 M по ТЗ
     if (currentSpent + validation.totalMitrons > 5000) {
         const available = Math.max(0, 5000 - currentSpent);
         return res.status(400).json({
             success: false,
-            error: `Превышен лимит! Вы уже приобрели на ${currentSpent} M. Ваша макс. доступная покупка: ${available} M (глобальный лимит 5000 M).`
+            error: `Превышен лимит! Вы уже приобрели товаров на ${currentSpent} M. Кнопка оплаты заблокирована до получения 100% кешбэка.`
         });
     }
 
@@ -259,7 +274,7 @@ app.post('/api/shop/pay', async (req, res) => {
             createdAt: new Date().toISOString()
         });
 
-        // Расчет финансов с учетом наличия Лидера в ветке (Сайт 2 передает site2Data.hasBranchLeader)
+        // Расчет финансов по новому ТЗ (учитывает наличие Лидера в ветке с 10+ личниками)
         const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
 
         return res.json({ 
@@ -281,17 +296,29 @@ app.post('/api/shop/pay', async (req, res) => {
 // API Валидации Корзины
 app.post('/api/shop/validate-cart', (req, res) => {
     const { totalMitrons } = req.body || {};
-    const validation = validateCartTotal(Number(totalMitrons) || 0);
+    const total = Number(totalMitrons) || 0;
+    const validation = validateCartTotal(total);
+    
+    if (!validation.valid) {
+        validation.message = formatCartErrorMessage(total);
+    }
+    
     res.json(validation);
 });
 
 app.post('/api/cart/validate', (req, res) => {
     const { totalMitrons } = req.body || {};
-    const validation = validateCartTotal(Number(totalMitrons) || 0);
+    const total = Number(totalMitrons) || 0;
+    const validation = validateCartTotal(total);
+    
+    if (!validation.valid) {
+        validation.message = formatCartErrorMessage(total);
+    }
+    
     res.json(validation);
 });
 
-// API Мультипокупки
+// API Мультипокупки (Корзина)
 app.post('/api/shop/checkout', async (req, res) => {
     const { username, totalMitrons, cartItems, uplineUser, sponsor } = req.body || {};
     
@@ -302,12 +329,13 @@ app.post('/api/shop/checkout', async (req, res) => {
     const cleanUser = username.trim();
     const cleanSponsor = (sponsor || uplineUser || '').trim();
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
-    const validation = validateCartTotal(Number(totalMitrons) || 0);
+    const total = Number(totalMitrons) || 0;
+    const validation = validateCartTotal(total);
 
     if (!validation.valid) {
         return res.status(400).json({ 
             success: false, 
-            error: validation.message,
+            error: formatCartErrorMessage(total),
             addons: validation.addons || []
         });
     }
@@ -317,7 +345,7 @@ app.post('/api/shop/checkout', async (req, res) => {
         const available = Math.max(0, 5000 - currentSpent);
         return res.status(400).json({
             success: false,
-            error: `Превышен лимит! Вы уже купили на ${currentSpent} M. Допустимая сумма покупки до 5000 M составляет: ${available} M.`
+            error: `Превышен лимит 5000 M! Вы уже приобрели товаров на ${currentSpent} M. Оплата заблокирована до получения 100% кешбэка.`
         });
     }
 
