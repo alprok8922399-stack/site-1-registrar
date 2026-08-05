@@ -191,8 +191,10 @@ async function processPayment() {
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
+    const sponsorInput = document.getElementById('sponsorInput');
 
     const username = userInput && userInput.value.trim() ? userInput.value.trim() : (localStorage.getItem('mitron_user') || 'Покупатель');
+    const sponsorLogin = sponsorInput ? sponsorInput.value.trim() : '';
 
     if (!username || username === 'Покупатель') {
         if (hint) {
@@ -216,6 +218,7 @@ async function processPayment() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: username,
+                sponsor: sponsorLogin, // Скопированный логин лидера
                 totalMitrons: totalM,
                 cartItems: cart
             })
@@ -278,7 +281,7 @@ async function loadUserOrders() {
             ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                const canRefund = diffDays <= 31 && order.status !== 'REFUNDED';
+                const canRefund = diffDays <= 33 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
                 const orderAmount = order.totalMitrons || order.amountMitrons || 1000;
 
