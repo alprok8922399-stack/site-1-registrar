@@ -191,12 +191,13 @@ app.get('/api/shop/user-purchases/:username', (req, res) => {
 
 // Оплата и покупка
 app.post('/api/shop/pay', async (req, res) => {
-    const { username, amountMitrons, uplineUser } = req.body || {};
+    const { username, amountMitrons, uplineUser, sponsor } = req.body || {};
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: 'Укажите логин покупателя' });
     }
 
     const cleanUser = username.trim();
+    const cleanSponsor = (sponsor || uplineUser || '').trim();
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const total = amountMitrons || 1000;
     const validation = validateCartTotal(Number(total) || 0);
@@ -229,7 +230,7 @@ app.post('/api/shop/pay', async (req, res) => {
                 hashId: hashId,
                 unitsCount: validation.unitsCount || validation.cellsCount, 
                 amountMitrons: validation.totalMitrons,
-                uplineUser: uplineUser || null
+                uplineUser: cleanSponsor || null
             })
         });
 
@@ -259,7 +260,7 @@ app.post('/api/shop/pay', async (req, res) => {
         });
 
         // Расчет финансов с учетом наличия Лидера в ветке (Сайт 2 передает site2Data.hasBranchLeader)
-        const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
+        const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
 
         return res.json({ 
             success: true, 
@@ -292,13 +293,14 @@ app.post('/api/cart/validate', (req, res) => {
 
 // API Мультипокупки
 app.post('/api/shop/checkout', async (req, res) => {
-    const { username, totalMitrons, cartItems, uplineUser } = req.body || {};
+    const { username, totalMitrons, cartItems, uplineUser, sponsor } = req.body || {};
     
     if (!username || !username.trim()) {
         return res.status(400).json({ success: false, error: "Укажите логин покупателя" });
     }
 
     const cleanUser = username.trim();
+    const cleanSponsor = (sponsor || uplineUser || '').trim();
     const currentSpent = userPurchasesTotal[cleanUser] || 0;
     const validation = validateCartTotal(Number(totalMitrons) || 0);
 
@@ -331,7 +333,7 @@ app.post('/api/shop/checkout', async (req, res) => {
                 unitsCount: validation.unitsCount || validation.cellsCount,
                 amountMitrons: validation.totalMitrons,
                 cartItems: cartItems || [],
-                uplineUser: uplineUser || null
+                uplineUser: cleanSponsor || null
             })
         });
 
@@ -362,7 +364,7 @@ app.post('/api/shop/checkout', async (req, res) => {
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
             // Расчет с учетом наличия Лидера в ветке
-            const financeData = calculatePurchaseFinance(cleanUser, uplineUser, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
+            const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
             
             return res.json({ 
                 success: true, 
