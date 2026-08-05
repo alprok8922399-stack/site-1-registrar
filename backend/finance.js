@@ -3,7 +3,7 @@
  * ПРОЕКТ MITRON — САЙТ 1 (site-1-registrar)
  * Файловый путь: site-1-registrar/backend/finance.js
  * Назначение: Модуль финансовой логики, отчислений и статистики
- * Соответствует регламенту ТЗ проекта «MITRON»
+ * Соответствует новому регламенту ТЗ проекта «MITRON»
  * =========================================================
  */
 
@@ -15,12 +15,14 @@ const refundLogs = [];
  * - Максимальная стоимость товара на внешнем МП: 450 M за каждые 1000 M
  * - Системный резерв под кешбэк 100%: 250 M за каждые 1000 M
  * - Замороженные реферальные вознаграждения: 70 M (50+10+10) за каждые 1000 M
+ * - Бонус Лидеру ветки: 7 M за каждые 1000 M
  * -----------------------------------------------------
- * Базовый остаток = Входящая сумма - Обязательства
- * Фонд DAO (10% от базового остатка)
- * Чистая прибыль Администратора (90% от базового остатка minus 10M Лидерских)
+ * Фиксированные обязательства = 450 + 250 + 70 + 7 = 777 M
+ * Базовый остаток = 1000 M - 777 M = 223 M
+ * Фонд DAO (10% от базового остатка): 23 M
+ * Чистая прибыль Администратора: 223 M - 23 M = 200 M (Ровно)
  */
-function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null, hasBranchLeader = false) {
+function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null) {
     const totalAmount = Number(totalMitronsInput) || 1000;
     const unitsCount = Math.max(1, Math.round(totalAmount / 1000));
     
@@ -28,25 +30,23 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
     const maxAllowedGoodsCost = 450 * unitsCount;
     const goodsCost = actualGoodsCostInput !== null ? Math.min(actualGoodsCostInput, maxAllowedGoodsCost) : maxAllowedGoodsCost;
     
-    // 1. Фиксированные обязательства
-    const systemReserve = 250 * unitsCount;               // Системный резерв под 100% кешбэк
-    const refReserveTotal = 70 * unitsCount;              // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 33 дня
+    // 1. Обязательства платформы
+    const systemReserve = 250 * unitsCount;                // Системный резерв под 100% кешбэк
+    const refReserveTotal = 70 * unitsCount;               // 50M (1 ур) + 10M (2 ур) + 10M (3 ур) резерв на 33 дня
+    const leaderBonusTotal = 7 * unitsCount;               // Бонус лидеру ветки (7 M за каждые 1000 M)
     
-    const totalObligations = goodsCost + systemReserve + refReserveTotal;
+    const totalObligations = goodsCost + systemReserve + refReserveTotal + leaderBonusTotal;
     
-    // 2. Расчет базового остатка (включая экономию при дешевом закупе)
+    // 2. Расчет базового остатка (включая экономию при дешевом закупе товара)
     const baseRemainder = Math.max(0, totalAmount - totalObligations);
     
-    // 3. Распределения из базового остатка
-    const daoFundShare = Math.round(baseRemainder * 0.10); // 10% в DAO
-    let adminNetProfit = baseRemainder - daoFundShare;     // 90% Админу
-    
-    // Вычет Лидерского бонуса с ветки (10 M за каждые 1000 M) из прибыли Админа
-    const leaderBonus = hasBranchLeader ? (10 * unitsCount) : 0;
-    adminNetProfit = Math.max(0, adminNetProfit - leaderBonus);
+    // 3. Распределения из базового остатка (DAO и Прибыль Админа)
+    // При максимальной цене товара 450M: базовый остаток = 223M -> DAO = 23M, Админ = 200M
+    const daoFundShare = Math.round(baseRemainder * 0.10); // 10% в DAO (23 M)
+    const adminNetProfit = baseRemainder - daoFundShare;   // Остаток Админу (200 M)
 
-    // В Выплатной кошелек уходит: Товары + Резерв + Реферальные + DAO + Лидерские
-    const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + daoFundShare + leaderBonus;
+    // В Выплатной кошелек уходит: Товары + Резерв + Реферальные + Лидерские + DAO (800 M при макс. цене товара)
+    const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + leaderBonusTotal + daoFundShare;
 
     return {
         success: true,
@@ -55,8 +55,8 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
         totalMitrons: totalAmount,
         unitsCount: unitsCount,
         distribution: {
-            adminWalletMitrons: totalAmount, // Первично 100% всей суммы заходит в Кошелек Админа
-            payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз
+            adminWalletMitrons: totalAmount,      // Первично 100% всей суммы заходит в Кошелек Админа
+            payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз (800 M)
             logisticsMitrons: goodsCost,
             systemReserve: systemReserve,
             refReserve: {
@@ -65,9 +65,9 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
                 level3: 10 * unitsCount,
                 total: refReserveTotal
             },
-            leaderBonus: leaderBonus,
+            leaderBonus: leaderBonusTotal,
             daoPool: daoFundShare,
-            adminNetProfit: adminNetProfit
+            adminNetProfit: adminNetProfit       // Ровно 200 M
         },
         paymentDate: new Date().toISOString(),
         timerDays: 33 // 33-дневный таймер отмена/кешбэк
@@ -135,16 +135,18 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
     let logisticsTotal = 0;
     let systemReserveTotal = 0;
     let refReserveTotal = 0;
+    let leaderBonusTotal = 0;
     let daoPoolTotal = 0;
     let adminNetProfitTotal = 0;
     let totalActiveUnits = 0;
 
     activePurchases.forEach(p => {
-        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost, p.hasBranchLeader);
+        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost);
         totalMitrons += finData.totalMitrons;
         logisticsTotal += finData.distribution.logisticsMitrons;
         systemReserveTotal += finData.distribution.systemReserve;
         refReserveTotal += finData.distribution.refReserve.total;
+        leaderBonusTotal += finData.distribution.leaderBonus;
         daoPoolTotal += finData.distribution.daoPool;
         adminNetProfitTotal += finData.distribution.adminNetProfit;
         totalActiveUnits += finData.unitsCount;
@@ -161,12 +163,13 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
         buyersCount: activeBuyersSet.size,                          // Только реальные активные покупатели
         refusedTodayText: `${refundStats.refusedTodayUsers} чел. (${refundStats.refusedTodayUnits} яч.)`,
         refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.)`,
-        cashbackPaid: 0,                                            // Кешбэк по акции
+        cashbackPaid: 0,                                            // Кешбэк
         refReserveTotal: refReserveTotal,                           // Замороженный резерв реферальных (на 33 дня)
         systemReserveTotal: systemReserveTotal,                     // Замороженный системный резерв под кешбэк
+        leaderBonusTotal: leaderBonusTotal,                         // Выплаты/резерв Лидерам ветки
         daoPoolTotal: daoPoolTotal,                                 // Фонд DAO (10%)
-        adminNetProfitTotal: adminNetProfitTotal,                   // Чистая прибыль Админа
-        totalMatrixSlots: totalActiveUnits + refundStats.totalUnitsRefused, // Всего ячеек в структуре (активные + отказники Админа)
+        adminNetProfitTotal: adminNetProfitTotal,                   // Чистая прибыль Админа (ровно 200M с 1000M)
+        totalMatrixSlots: totalActiveUnits + refundStats.totalUnitsRefused, // Всего ячеек в структуре
         adminLoginsCount: 1,                                        // Логин системного админа
         buyerLoginsCount: activeBuyersSet.size
     };
