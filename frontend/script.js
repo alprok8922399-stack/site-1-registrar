@@ -319,7 +319,8 @@ async function loadUserOrders() {
             ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                // Ровно 33 дня отказного периода
+                
+                // Проверка 33 дней
                 const canRefund = diffDays <= 33 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
 
@@ -332,10 +333,10 @@ async function loadUserOrders() {
                             </span>
                         </div>
                         <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons || order.amountMitrons || 1000} M</strong></div>
-                        ${canRefund ? `
+                        ${!isRefunded ? `
                             <button 
-                                onclick="refundOrder('${order.id || order._id}')" 
-                                style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                                ${canRefund ? `onclick="refundOrder('${order.id || order._id}')"` : 'disabled'}
+                                style="width:100%; padding:10px; background:${canRefund ? '#e74c3c' : '#ccc'}; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:${canRefund ? 'pointer' : 'not-allowed'}; font-size:13px; margin-top:5px;">
                                 🚫 Отказаться от покупки (Возврат)
                             </button>
                         ` : ''}
