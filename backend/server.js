@@ -424,6 +424,19 @@ app.post('/api/shop/refund', async (req, res) => {
     
     // Ищем точный заказ в базе
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
+
+    // Жесткая проверка 33-дневного лимита
+    if (targetOrder && targetOrder.createdAt) {
+        const orderDate = new Date(targetOrder.createdAt).getTime();
+        const daysPassed = (Date.now() - orderDate) / (1000 * 60 * 60 * 24);
+
+        if (daysPassed >= 33) {
+            return res.status(400).json({
+                success: false,
+                error: "Срок действия функции возврата (33 дня) истек. Отказ от покупки больше недоступен."
+            });
+        }
+    }
     
     let refundAmount = Number(amount);
     if (!refundAmount || isNaN(refundAmount)) {
