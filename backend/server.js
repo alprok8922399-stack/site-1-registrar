@@ -67,16 +67,17 @@ function getOrCreateHashId(username) {
     return userHashIds[username];
 }
 
-// Формирование текста ошибки корзины с разрывом в 10 M (согласно ТЗ)
+// Формирование текста ошибки корзины с указанием точного разрыва -10 M (согласно ТЗ)
 function formatCartErrorMessage(currentTotal) {
-    const targets = [1000, 2000, 3000, 4000, 5000];
-    const nextTarget = targets.find(t => t > currentTotal) || 1000;
+    const targetBracket = Math.ceil(currentTotal / 1000) * 1000;
+    const nextBracket = targetBracket === currentTotal ? targetBracket + 1000 : targetBracket;
+    const minAllowed = nextBracket - 10;
     
-    const minNeeded = nextTarget - 10 - currentTotal; // с учетом допуска -10 M
-    const maxNeeded = nextTarget - currentTotal;
+    const minNeeded = minAllowed - currentTotal;
+    const maxNeeded = nextBracket - currentTotal;
     
-    if (minNeeded <= 0) {
-        return `Необходимо скорректировать корзину до кратной суммы (1000, 2000, 3000, 4000 или 5000 M).`;
+    if (minNeeded <= 0 && currentTotal >= minAllowed && currentTotal <= nextBracket) {
+        return `Корзина готова к оплате.`;
     }
     
     return `Вам необходимо заполнить корзину ещё на ${minNeeded}–${maxNeeded} Митронов.`;
@@ -185,7 +186,7 @@ app.get('/api/shop/orders', (req, res) => {
     res.json({ success: true, orders, hashId });
 });
 
-// Проверка накопительного лимита пользователя
+// Проверка накопительного лимита пользователя (макс 5000 M по ТЗ)
 app.get('/api/shop/user-purchases/:username', (req, res) => {
     const cleanUser = (req.params.username || '').trim();
     const totalSpent = userPurchasesTotal[cleanUser] || 0;
@@ -226,7 +227,6 @@ app.post('/api/shop/pay', async (req, res) => {
 
     // Жесткая проверка накопительного лимита в 5000 M по ТЗ
     if (currentSpent + validation.totalMitrons > 5000) {
-        const available = Math.max(0, 5000 - currentSpent);
         return res.status(400).json({
             success: false,
             error: `Превышен лимит! Вы уже приобрели товаров на ${currentSpent} M. Кнопка оплаты заблокирована до получения 100% кешбэка.`
@@ -273,7 +273,7 @@ app.post('/api/shop/pay', async (req, res) => {
             createdAt: new Date().toISOString()
         });
 
-        // Расчет финансов по новому ТЗ (учитывает наличие Лидера в ветке с 10+ личниками)
+        // Расчет финансов по ТЗ
         const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
 
         return res.json({ 
@@ -341,7 +341,6 @@ app.post('/api/shop/checkout', async (req, res) => {
 
     // Жесткая проверка накопительного лимита в 5000 M
     if (currentSpent + validation.totalMitrons > 5000) {
-        const available = Math.max(0, 5000 - currentSpent);
         return res.status(400).json({
             success: false,
             error: `Превышен лимит 5000 M! Вы уже приобрели товаров на ${currentSpent} M. Оплата заблокирована до получения 100% кешбэка.`
@@ -374,7 +373,6 @@ app.post('/api/shop/checkout', async (req, res) => {
 
         const site2Data = await site2Res.json();
         if (site2Data.success) {
-            // Увеличиваем накопленный объем покупок
             userPurchasesTotal[cleanUser] = currentSpent + validation.totalMitrons;
             if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
             
@@ -390,7 +388,6 @@ app.post('/api/shop/checkout', async (req, res) => {
 
             logEvent(`Покупатель ${cleanUser} совершил покупку на ${validation.totalMitrons} M`);
             
-            // Расчет с учетом наличия Лидера в ветке
             const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
             
             return res.json({ 
@@ -421,7 +418,7 @@ app.post('/api/shop/refund', async (req, res) => {
     const cleanUser = username.trim();
     const userOrders = userOrdersStore[cleanUser] || [];
     
-    // Ищем точный заказ в базе
+    // Ищем точный заказ
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
 
     // Жесткая проверка 33-дневного лимита
@@ -476,7 +473,7 @@ app.post('/api/shop/refund', async (req, res) => {
         });
     }
 
-    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе, чтобы освободить лимит
+    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе
     if (userPurchasesTotal[cleanUser]) {
         userPurchasesTotal[cleanUser] = Math.max(0, userPurchasesTotal[cleanUser] - refundAmount);
     }
