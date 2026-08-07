@@ -156,7 +156,8 @@ function validateCartTotal(totalMitrons) {
             valid: false, 
             message: "Корзина пуста. Добавьте товары.", 
             targetBracket: 1000, 
-            needed: 1000 
+            neededMin: 990,
+            neededMax: 1000
         };
     }
 
@@ -165,7 +166,8 @@ function validateCartTotal(totalMitrons) {
             valid: false, 
             message: "Максимальный объем одной покупки за один раз — 5000 Митронов!", 
             targetBracket: 5000, 
-            needed: 0 
+            neededMin: 0,
+            neededMax: 0
         };
     }
 
@@ -181,14 +183,29 @@ function validateCartTotal(totalMitrons) {
             totalMitrons: totalMitrons, 
             targetBracket: targetBracket 
         };
+    } else if (totalMitrons > targetBracket) {
+        // Защита от переполнения
+        const nextBracket = targetBracket + 1000;
+        const neededMin = nextBracket - 10 - totalMitrons;
+        const neededMax = nextBracket - totalMitrons;
+        return {
+            valid: false,
+            message: `Вам необходимо заполнить корзину ещё на ${neededMin}-${neededMax} Митронов`,
+            targetBracket: nextBracket,
+            neededMin,
+            neededMax,
+            addons: suggestAddonProducts(neededMax)
+        };
     } else {
-        const needed = Math.round(minAllowed - totalMitrons);
-        const addons = suggestAddonProducts(needed > 0 ? needed : 0);
+        const neededMin = minAllowed - totalMitrons;
+        const neededMax = targetBracket - totalMitrons;
+        const addons = suggestAddonProducts(neededMax);
         return { 
             valid: false, 
-            message: `Вам необходимо заполнить корзину ещё на ${needed > 0 ? needed : 0} Митронов`, 
+            message: `Вам необходимо заполнить корзину ещё на ${neededMin}-${neededMax} Митронов`, 
             targetBracket: targetBracket,
-            needed: needed > 0 ? needed : 0,
+            neededMin,
+            neededMax,
             addons: addons
         };
     }
