@@ -1,12 +1,18 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
  * Проект: MITRON
- * Управление витриной, корзиной, валидация диапазонов (-10 M), отказ от покупок и работа с Роботом.
  */
 
 const API_URL = '/api';
 let cart = [];
 let catalog = [];
+
+// Помогалка для экранирования HTML (Защита от XSS)
+function escapeHTML(str) {
+    return String(str ?? '').replace(/[&<>"']/g, match => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[match]));
+}
 
 // 1. Старт инициализации
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadUserOrders();
 });
 
-// Загрузка статистики по отказам (включая за 24 часа)
+// Загрузка статистики по отказам
 async function loadRefundStats() {
     try {
         const res = await fetch(`${API_URL}/shop/refund-stats`);
@@ -45,7 +51,7 @@ async function loadProducts() {
         if (res.ok) {
             catalog = await res.json();
         } else {
-            // Резервный расширенный список товаров
+            // Резервный список товаров
             catalog = [
                 { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
                 { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
@@ -69,10 +75,10 @@ function renderCatalog() {
     if (!grid) return;
 
     grid.innerHTML = catalog.map(p => {
-        const displayTitle = p.title || p.name;
-        const priceM = p.priceMitrons || p.priceM || 1000;
-        const image = p.image || 'https://via.placeholder.com/300x200';
-        const desc = p.description || '';
+        const displayTitle = escapeHTML(p.title || p.name);
+        const priceM = Number(p.priceMitrons || p.priceM || 1000);
+        const image = escapeHTML(p.image || 'https://via.placeholder.com/300x200');
+        const desc = escapeHTML(p.description || '');
 
         return `
             <div class="card">
@@ -109,7 +115,7 @@ function removeFromCart(index) {
     updateCartUI();
 }
 
-// 4. Отрисовка корзины и динамических проверок
+// 4. Отрисовка корзины
 function updateCartUI() {
     const badge = document.getElementById('cartBadge');
     const itemsContainer = document.getElementById('cartItems');
@@ -124,8 +130,8 @@ function updateCartUI() {
             itemsContainer.innerHTML = cart.map((item, idx) => `
                 <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
                     <div>
-                        <strong>${item.title || item.name}</strong>
-                        <div style="font-size:12px; color:#666;">${item.priceMitrons || item.priceM} M</div>
+                        <strong>${escapeHTML(item.title || item.name)}</strong>
+                        <div style="font-size:12px; color:#666;">${Number(item.priceMitrons || item.priceM || 0)} M</div>
                     </div>
                     <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
                 </div>
@@ -133,13 +139,13 @@ function updateCartUI() {
         }
     }
 
-    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
+    const totalM = cart.reduce((sum, item) => sum + Number(item.priceMitrons || item.priceM || 0), 0);
     if (totalEl) totalEl.innerText = `${totalM} M`;
 
     validateCartUI(totalM);
 }
 
-// 5. Строгая валидация корзины (-10 M) по ТЗ с выводом нехватки
+// 5. Валидация диапазонов (-10 M)
 function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
@@ -159,7 +165,6 @@ function validateCartUI(totalM) {
         return;
     }
 
-    // Допустимые диапазоны (погрешность до -10 M)
     const ranges = [
         { min: 990, max: 1000 },
         { min: 1990, max: 2000 },
@@ -175,9 +180,7 @@ function validateCartUI(totalM) {
         hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
         payBtn.disabled = false;
     } else {
-        let target = ranges.find(r => r.max >= totalM);
-        if (!target) target = ranges[ranges.length - 1];
-
+        let target = ranges.find(r => r.max >= totalM) || ranges[ranges.length - 1];
         const needMore = target.min - totalM;
         hint.className = 'status-alert warning';
         hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
@@ -187,7 +190,7 @@ function validateCartUI(totalM) {
 
 // 6. Оплата заказа
 async function processPayment() {
-    const totalM = cart.reduce((sum, item) => sum + (item.priceMitrons || item.priceM || 0), 0);
+    const totalM = cart.reduce((sum, item) => sum + Number(item.priceMitrons || item.priceM || 0), 0);
     const payBtn = document.getElementById('payBtn');
     const hint = document.getElementById('cartHint');
     const userInput = document.getElementById('usernameInput');
@@ -217,8 +220,8 @@ async function processPayment() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                username: username,
-                sponsor: sponsorLogin, // Скопированный логин лидера
+                username,
+                sponsor: sponsorLogin,
                 totalMitrons: totalM,
                 cartItems: cart
             })
@@ -247,7 +250,7 @@ async function processPayment() {
     }
 }
 
-// Вспомогательная функция поиска/создания контейнера для заказов
+// Вспомогательный контейнер для заказов
 function getOrCreateOrdersContainer() {
     let container = document.getElementById('userOrdersContainer');
     if (!container) {
@@ -260,7 +263,7 @@ function getOrCreateOrdersContainer() {
     return container;
 }
 
-// 7. Управление заказами пользователя и ОТОБРАЖЕНИЕ КНОПКИ ОТКАЗА
+// 7. Управление заказами пользователя и кнопка отказа
 async function loadUserOrders() {
     const ordersContainer = getOrCreateOrdersContainer();
 
@@ -282,27 +285,22 @@ async function loadUserOrders() {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
                 const isRefunded = order.status === 'REFUNDED';
-                const isExpired = diffDays >= 33; // Флаг истечения 33 дней
-                const orderAmount = order.totalMitrons || order.amountMitrons || 1000;
+                const isExpired = diffDays >= 33;
+                const orderAmount = Number(order.totalMitrons || order.amountMitrons || 1000);
+                const safeOrderId = escapeHTML(order.id || order._id || '1');
 
                 let buttonHtml = '';
                 if (isRefunded) {
                     buttonHtml = `<div style="font-size:12px; color:#777; text-align:center; padding:5px;">Покупка была отменена</div>`;
                 } else if (isExpired) {
-                    // Кнопка заблокирована по прошествии 33 дней
                     buttonHtml = `
-                        <button 
-                            disabled 
-                            style="width:100%; padding:10px; background:#95a5a6; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px; opacity:0.6;">
+                        <button disabled style="width:100%; padding:10px; background:#95a5a6; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px; opacity:0.6;">
                             🚫 Срок возврата истек (33 дня)
                         </button>
                     `;
                 } else {
-                    // Кнопка активна
                     buttonHtml = `
-                        <button 
-                            onclick="refundOrder('${order.id || order._id}', ${orderAmount})" 
-                            style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                        <button onclick="refundOrder('${safeOrderId}', ${orderAmount})" style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
                             🚫 Отказаться от покупки (Возврат)
                         </button>
                     `;
@@ -311,7 +309,7 @@ async function loadUserOrders() {
                 return `
                     <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                            <strong>Заказ #${order.id || order._id || '1'}</strong>
+                            <strong>Заказ #${safeOrderId}</strong>
                             <span style="font-size:12px; color:${isRefunded ? '#e74c3c' : '#2ecc71'}; font-weight:bold;">
                                 ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
                             </span>
@@ -361,7 +359,7 @@ async function refundOrder(orderId, amount) {
     }
 }
 
-// 8. Вход и Окна
+// 8. Авторизация и модальные окна
 function checkAuthStatus() {
     const user = localStorage.getItem('mitron_user');
     const authBtn = document.getElementById('authBtn');
@@ -397,7 +395,7 @@ function toggleModal(open) {
     }
 }
 
-// 9. Связь с Генератором Робота
+// 9. Работа с Генератором Робота
 async function fetchBotStatus() {
     const statusLabel = document.getElementById('statusLabel');
     const actionBtn = document.getElementById('actionBtn');
@@ -420,7 +418,7 @@ async function fetchBotStatus() {
         }
 
         if (consoleLog && data.logs) {
-            consoleLog.innerHTML = data.logs.map(l => `<div>${l}</div>`).join('');
+            consoleLog.innerHTML = data.logs.map(l => `<div>${escapeHTML(l)}</div>`).join('');
         }
     } catch (err) {
         if (statusLabel) statusLabel.innerText = 'Сервер недоступен';
@@ -437,6 +435,11 @@ async function toggleBot(enable) {
     }
 }
 
-// Глобальные мосты для обработчиков событий
+// Глобальные экспортные мосты
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.processPayment = processPayment;
 window.refundOrder = refundOrder;
 window.handleAuthClick = handleAuthClick;
+window.toggleCart = toggleCart;
+window.toggleModal = toggleModal;
