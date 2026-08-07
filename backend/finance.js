@@ -16,13 +16,13 @@ const refundLogs = [];
  * 1) Стоимость выкупа товара (X): макс. 450 M на каждые 1000 M
  * 2) Резерв в Матрицу (на верхнюю ячейку): 250 M
  * 3) Реферальные выплаты (50 + 10 + 10): 70 M
- * 4) Лидерский бонус ветки (если есть Лидер с 10+ личниками): 7 M
+ * 4) Лидерский бонус ветки (с 11-го лично-приглашенного): 7 M
  * 5) Фонд DAO: 23 M
  * 6) Чистая прибыль Администратора: 200 M
  * -----------------------------------------------------
  * Итого по ТЗ: 450 + 250 + 70 + 7 + 23 + 200 = 1000 M
  */
-function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null, hasLeader = false) {
+function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, actualGoodsCostInput = null, hasLeaderEligible = false) {
     const totalAmount = Number(totalMitronsInput) || 1000;
     const unitsCount = Math.max(1, Math.round(totalAmount / 1000));
     
@@ -30,17 +30,20 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
     const maxAllowedGoodsCost = 450 * unitsCount;
     const goodsCost = actualGoodsCostInput !== null ? Math.min(actualGoodsCostInput, maxAllowedGoodsCost) : maxAllowedGoodsCost;
     
-    // 1. Фиксированные базовые обязательства по ТЗ (на 1000 M)
-    const systemReserve = 250 * unitsCount;  // 250M на верхнюю ячейку в матрицу (на кешбэк через 33 дня)
+    // 1. Фиксированные базовые обязательства по ТЗ (на каждую ячейку 1000 M)
+    const systemReserve = 250 * unitsCount;  // 250M на верхнюю ячейку в матрицу
     const refReserveTotal = 70 * unitsCount; // 50M (1 ур) + 10M (2 ур) + 10M (3 ур)
-    const leaderBonus = (hasLeader ? 7 : 0) * unitsCount; // 7M Лидерский бонус ветки
-    const daoFundShare = 23 * unitsCount;    // 23M Фонд DAO
+    const leaderBonus = (hasLeaderEligible ? 7 : 0) * unitsCount; // 7M с каждого 11+ личника
     
-    // 2. Расчет чистой прибыли Администратора (с учетом экономии на закупке товара)
-    const savedOnGoods = maxAllowedGoodsCost - goodsCost;
-    const adminNetProfit = (200 * unitsCount) + savedOnGoods; // Базово 200M + экономия при закупке < 450M
+    // 2. Расчет базового остатка и чистой прибыли Администратора
+    // При базовой закупке 450M: 1000 - (450 + 250 + 70 + (hasLeaderEligible?7:0))
+    const baseRest = totalAmount - (goodsCost + systemReserve + refReserveTotal + leaderBonus);
+    
+    // Отчисление в DAO — строго 10% от базового остатка (или фиксированно 23M при 450M закупки)
+    const daoFundShare = actualGoodsCostInput !== null ? Math.round(baseRest * 0.10) : (23 * unitsCount);
+    const adminNetProfit = baseRest - daoFundShare;
 
-    // В Выплатной шлюз уходят: Закупка + Резерв + Рефералка + Лидерские + DAO
+    // В Выплатной шлюз уходят: Закупка + Резерв Матрицы + Рефералка + Лидерские + DAO
     const payoutWalletTotal = goodsCost + systemReserve + refReserveTotal + leaderBonus + daoFundShare;
 
     return {
@@ -50,7 +53,7 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
         totalMitrons: totalAmount,
         unitsCount: unitsCount,
         distribution: {
-            adminWalletMitrons: totalAmount,       // Первично 100% всей суммы заходит в Кошелек Админа
+            adminWalletMitrons: totalAmount,       // Первично 100% денег заходит в Кошелек Админа
             payoutWalletMitrons: payoutWalletTotal, // Переводится в Выплатной шлюз
             logisticsMitrons: goodsCost,           // 450 M (или менее)
             systemReserve: systemReserve,          // 250 M
@@ -60,12 +63,12 @@ function calculatePurchaseFinance(username, sponsor, totalMitronsInput = 1000, a
                 level3: 10 * unitsCount,
                 total: refReserveTotal             // 70 M
             },
-            leaderBonus: leaderBonus,              // 7 M (или 0)
+            leaderBonus: leaderBonus,              // 7 M (с 11-го личника)
             daoPool: daoFundShare,                 // 23 M
             adminNetProfit: adminNetProfit         // 200 M (при закупке 450M)
         },
         paymentDate: new Date().toISOString(),
-        timerDays: 33 // 33-дневный таймер отмена/кешбэк
+        timerDays: 33 // Строго 33-дневный таймер
     };
 }
 
@@ -120,9 +123,9 @@ function getRefundStats() {
 }
 
 /**
- * Перерасчет глобальной финансовой аналитики карточки
+ * Перерасчет глобальной финансовой аналитики карточки Администратора
  */
-function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
+function calculateGlobalAnalytics(allPurchases = [], allUsers = [], leadersCount = 0) {
     const activePurchases = allPurchases.filter(p => !p.isRefunded);
     
     let totalMitrons = 0;
@@ -135,7 +138,7 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
     let totalActiveUnits = 0;
 
     activePurchases.forEach(p => {
-        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost, p.hasLeader);
+        const finData = calculatePurchaseFinance(p.username, p.sponsor, p.totalMitrons, p.actualGoodsCost, p.hasLeaderEligible);
         totalMitrons += finData.totalMitrons;
         logisticsTotal += finData.distribution.logisticsMitrons;
         systemReserveTotal += finData.distribution.systemReserve;
@@ -153,8 +156,8 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
         totalMitrons: totalMitrons,
         logisticsTotal: logisticsTotal,
         buyersCount: activeBuyersSet.size,
-        refusedTodayText: `${refundStats.refusedTodayUsers} чел. (${refundStats.refusedTodayUnits} яч.)`,
-        refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.)`,
+        refusedTodayText: `${refundStats.refusedTodayUsers} (За последние 24 часа)`,
+        refusedTotalText: `${refundStats.totalUsersRefused} чел. (${refundStats.totalUnitsRefused} яч.) (Возврат 100%, позиция переходит Админу)`,
         cashbackPaid: 0,
         refReserveTotal: refReserveTotal,
         leaderBonusTotal: leaderBonusTotal,
@@ -162,6 +165,7 @@ function calculateGlobalAnalytics(allPurchases = [], allUsers = []) {
         daoPoolTotal: daoPoolTotal,
         adminNetProfitTotal: adminNetProfitTotal,
         totalMatrixSlots: totalActiveUnits + refundStats.totalUnitsRefused,
+        activeLeadersCount: leadersCount,
         adminLoginsCount: 1,
         buyerLoginsCount: activeBuyersSet.size
     };
