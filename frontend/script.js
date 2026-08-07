@@ -19,6 +19,19 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAuthStatus();
     loadRefundStats();
     loadUserOrders();
+
+    // Слушатель изменения поля с логином для мгновенного обновления заказов
+    const userInput = document.getElementById('usernameInput');
+    if (userInput) {
+        userInput.addEventListener('change', () => {
+            const val = userInput.value.trim();
+            if (val) {
+                localStorage.setItem('mitron_user', val);
+                checkAuthStatus();
+                loadUserOrders();
+            }
+        });
+    }
 });
 
 // Загрузка статистики по отказам
@@ -31,8 +44,8 @@ async function loadRefundStats() {
                 const todayEl = document.getElementById('stat-refused-today');
                 const totalEl = document.getElementById('stat-refused-total');
                 
-                if (todayEl) todayEl.innerText = `${data.stats.refusedToday || 0} чел.`;
-                if (totalEl) totalEl.innerText = `${data.stats.totalRefused || 0} чел.`;
+                if (todayEl) todayEl.innerText = `${data.stats.refusedToday || data.stats.refusedTodayUsers || 0} чел.`;
+                if (totalEl) totalEl.innerText = `${data.stats.totalRefused || data.stats.totalUsersRefused || 0} чел.`;
             }
         }
     } catch (e) {
@@ -51,14 +64,14 @@ async function loadProducts() {
             catalog = await res.json();
         } else {
             catalog = [
-                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
-                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
-                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" },
-                { id: 4, title: "Беспроводные наушники MITRON Sound *", priceMitrons: 500, description: "Себестоимость: 25 USDT | Наценка: x2.60 | Итого: 500 M" },
-                { id: 5, title: "Кожаный портмоне MITRON Leather *", priceMitrons: 346, description: "Себестоимость: 15 USDT | Наценка: x3.00 | Итого: 346 M" },
-                { id: 6, title: "Умная бутылка MITRON Hydro *", priceMitrons: 323, description: "Себестоимость: 18 USDT | Наценка: x2.33 | Итого: 323 M" },
-                { id: 7, title: "Фирменная кепка MITRON Cap *", priceMitrons: 215, description: "Себестоимость: 10 USDT | Наценка: x2.80 | Итого: 215 M" },
-                { id: 8, title: "Портативный PowerBank 20000 mAh *", priceMitrons: 446, description: "Себестоимость: 22 USDT | Наценка: x2.64 | Итого: 446 M" }
+                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Эквивалент ячейки матрицы" },
+                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 M | Наценка: x2.46 | Итого: 1231 M" },
+                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 M | Наценка: x2.62 | Итого: 654 M" },
+                { id: 4, title: "Беспроводные наушники MITRON Sound *", priceMitrons: 500, description: "Себестоимость: 25 M | Наценка: x2.60 | Итого: 500 M" },
+                { id: 5, title: "Кожаный портмоне MITRON Leather *", priceMitrons: 346, description: "Себестоимость: 15 M | Наценка: x3.00 | Итого: 346 M" },
+                { id: 6, title: "Умная бутылка MITRON Hydro *", priceMitrons: 323, description: "Себестоимость: 18 M | Наценка: x2.33 | Итого: 323 M" },
+                { id: 7, title: "Фирменная кепка MITRON Cap *", priceMitrons: 215, description: "Себестоимость: 10 M | Наценка: x2.80 | Итого: 215 M" },
+                { id: 8, title: "Портативный PowerBank 20000 mAh *", priceMitrons: 446, description: "Себестоимость: 22 M | Наценка: x2.64 | Итого: 446 M" }
             ];
         }
 
@@ -160,7 +173,7 @@ function validateCartUI(totalM) {
 
     if (grandTotal > 5000) {
         hint.className = 'status-alert error';
-        hint.innerText = `Превышен глобальный лимит! Доступно: ${Math.max(0, 5000 - userAccumulatedTotal)} M. Уберите товары из корзины.`;
+        hint.innerText = `Превышен глобальный лимит (5000 M)! Доступно для заказа: ${Math.max(0, 5000 - userAccumulatedTotal)} M. Уберите лишние товары.`;
         payBtn.disabled = true;
         return;
     }
@@ -377,7 +390,7 @@ function checkAuthStatus() {
         authBtn.innerText = user ? `👤 ${user}` : '👤 Вход';
     }
     const input = document.getElementById('usernameInput');
-    if (input && user) {
+    if (input && user && !input.value) {
         input.value = user;
     }
 }
@@ -440,5 +453,10 @@ async function toggleBot(enable) {
 }
 
 // Глобальные мосты
+window.addToCart = addToCart;
+window.removeFromCart = removeFromCart;
+window.processPayment = processPayment;
 window.refundOrder = refundOrder;
 window.handleAuthClick = handleAuthClick;
+window.toggleCart = toggleCart;
+window.toggleModal = toggleModal;
