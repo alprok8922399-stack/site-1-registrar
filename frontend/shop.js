@@ -4,6 +4,7 @@
  */
 
 const API_URL = '/api';
+const MITRON_RATE = 0.13; // 1 M ≈ 0.13 USD (1000 M = 130 USD)
 let cart = [];
 let catalog = [];
 
@@ -41,7 +42,7 @@ async function loadRefundStats() {
     }
 }
 
-// 2. Отрисовка каталога товаров
+// 2. Отрисовка каталога товаров (с бейджем 100% Кешбэк и звездочкой *)
 async function loadProducts() {
     const grid = document.getElementById('productGrid');
     if (!grid) return;
@@ -51,16 +52,16 @@ async function loadProducts() {
         if (res.ok) {
             catalog = await res.json();
         } else {
-            // Резервный каталог по ТЗ
+            // Резервный каталог по ТЗ (без мусорных символов в названии)
             catalog = [
-                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
-                { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
-                { id: 3, title: "Фирменное худи MITRON DAO *", priceMitrons: 654, description: "Себестоимость: 32.5 USDT | Наценка: x2.62 | Итого: 654 M" },
-                { id: 4, title: "Беспроводные наушники MITRON Sound *", priceMitrons: 500, description: "Себестоимость: 25 USDT | Наценка: x2.60 | Итого: 500 M" },
-                { id: 5, title: "Кожаный портмоне MITRON Leather *", priceMitrons: 346, description: "Себестоимость: 15 USDT | Наценка: x3.00 | Итого: 346 M" },
-                { id: 6, title: "Умная бутылка MITRON Hydro *", priceMitrons: 323, description: "Себестоимость: 18 USDT | Наценка: x2.33 | Итого: 323 M" },
-                { id: 7, title: "Фирменная кепка MITRON Cap *", priceMitrons: 215, description: "Себестоимость: 10 USDT | Наценка: x2.80 | Итого: 215 M" },
-                { id: 8, title: "Портативный PowerBank 20000 mAh *", priceMitrons: 446, description: "Себестоимость: 22 USDT | Наценка: x2.64 | Итого: 446 M" }
+                { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, hasStar: false, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
+                { id: 2, title: "Смарт-часы MITRON Watch Pro", priceMitrons: 1231, hasStar: true, description: "Премиум аналог с лучшей комплектацией" },
+                { id: 3, title: "Фирменное худи MITRON DAO", priceMitrons: 654, hasStar: true, description: "Ограниченная серия" },
+                { id: 4, title: "Беспроводные наушники MITRON Sound", priceMitrons: 500, hasStar: true, description: "Шумоподавление ANC" },
+                { id: 5, title: "Кожаный портмоне MITRON Leather", priceMitrons: 346, hasStar: true, description: "Натуральная кожа" },
+                { id: 6, title: "Умная бутылка MITRON Hydro", priceMitrons: 323, hasStar: true, description: "Датчик температуры" },
+                { id: 7, title: "Фирменная кепка MITRON Cap", priceMitrons: 215, hasStar: true, description: "100% хлопок" },
+                { id: 8, title: "Портативный PowerBank 20000 mAh", priceMitrons: 446, hasStar: true, description: "Быстрая зарядка 22.5W" }
             ];
         }
 
@@ -77,11 +78,16 @@ function renderCatalog() {
     grid.innerHTML = catalog.map(p => {
         const displayTitle = escapeHTML(p.title || p.name);
         const priceM = Number(p.priceMitrons || p.priceM || 1000);
+        const priceUSD = (priceM * MITRON_RATE).toFixed(2);
         const image = escapeHTML(p.image || 'https://via.placeholder.com/300x200');
         const desc = escapeHTML(p.description || '');
+        const showStar = p.hasStar !== undefined ? p.hasStar : true; // По умолчанию показываем звезду для аналогов
 
         return `
-            <div class="card">
+            <div class="card" style="position:relative;">
+                <div style="position:absolute; top:8px; left:8px; background:#ff3d00; color:#fff; font-size:10px; font-weight:bold; padding:3px 7px; border-radius:4px; z-index:2; box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+                    100% Кешбэк
+                </div>
                 <img src="${image}" alt="${displayTitle}">
                 <div class="card-content">
                     <div>
@@ -89,10 +95,11 @@ function renderCatalog() {
                         ${desc ? `<div style="font-size:11px; color:#777; margin-bottom:5px;">${desc}</div>` : ''}
                     </div>
                     <div>
-                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#00b894; margin-bottom:10px;">
-                            ${priceM} M
+                        <div class="card-price" style="font-size:18px; font-weight:bold; color:#2e7d32; margin-bottom:2px; display:flex; align-items:baseline;">
+                            ${priceM} M ${showStar ? `<span class="ceiling-tag" title="Рассчитано по потолку комплектации">*</span>` : ''}
                         </div>
-                        <button class="btn btn-add" style="width:100%; padding:10px; background:#00b894; color:#fff; border:none; border-radius:5px; cursor:pointer;" onclick="addToCart('${p.id}')">В корзину</button>
+                        <div style="font-size:11px; color:#888; margin-bottom:8px;">≈ $${priceUSD} USD</div>
+                        <button class="btn btn-add" style="width:100%; padding:10px; background:#1a1f2c; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:bold;" onclick="addToCart('${p.id}')">В корзину</button>
                     </div>
                 </div>
             </div>
@@ -131,7 +138,7 @@ function updateCartUI() {
                 <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
                     <div>
                         <strong>${escapeHTML(item.title || item.name)}</strong>
-                        <div style="font-size:12px; color:#666;">${Number(item.priceMitrons || item.priceM || 0)} M</div>
+                        <div style="font-size:12px; color:#666;">${Number(item.priceMitrons || item.priceM || 0)} M (≈ $${(Number(item.priceMitrons || item.priceM || 0) * MITRON_RATE).toFixed(2)})</div>
                     </div>
                     <button class="btn" style="color:red; background:none; border:none; font-size:16px; cursor:pointer;" onclick="removeFromCart(${idx})">✕</button>
                 </div>
