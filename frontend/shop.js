@@ -1,20 +1,20 @@
 /**
  * Фронтенд-скрипт Маркетплейса (Сайт 1)
- * Проект: MITRON
+ * Проект: MITRON — Модуль взаимодействия с покупателем
  */
 
 const API_URL = '/api';
 let cart = [];
 let catalog = [];
 
-// Помогалка для экранирования HTML (Защита от XSS)
+// Вспомогательная функция защиты от XSS
 function escapeHTML(str) {
     return String(str ?? '').replace(/[&<>"']/g, match => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[match]));
 }
 
-// 1. Старт инициализации
+// 1. Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
     loadProducts();
     checkAuthStatus();
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadUserOrders();
 });
 
-// Загрузка статистики по отказам
+// Загрузка глобальной статистики по отказам
 async function loadRefundStats() {
     try {
         const res = await fetch(`${API_URL}/shop/refund-stats`);
@@ -32,8 +32,8 @@ async function loadRefundStats() {
                 const todayEl = document.getElementById('stat-refused-today');
                 const totalEl = document.getElementById('stat-refused-total');
                 
-                if (todayEl) todayEl.innerText = `${data.stats.refusedToday || 0} чел.`;
-                if (totalEl) totalEl.innerText = `${data.stats.totalRefused || 0} чел.`;
+                if (todayEl) todayEl.innerText = `${data.stats.refusedTodayUsers || data.stats.refusedToday || 0} чел. (${data.stats.refusedTodayUnits || 0} яч.)`;
+                if (totalEl) totalEl.innerText = `${data.stats.totalUsersRefused || data.stats.totalRefused || 0} чел. (${data.stats.totalUnitsRefused || 0} яч.)`;
             }
         }
     } catch (e) {
@@ -41,7 +41,7 @@ async function loadRefundStats() {
     }
 }
 
-// 2. Отрисовка товаров на витрине
+// 2. Отрисовка каталога товаров
 async function loadProducts() {
     const grid = document.getElementById('productGrid');
     if (!grid) return;
@@ -51,7 +51,7 @@ async function loadProducts() {
         if (res.ok) {
             catalog = await res.json();
         } else {
-            // Резервный список товаров
+            // Резервный каталог по ТЗ
             catalog = [
                 { id: 1, title: "Сертификат MITRON 1000", priceMitrons: 1000, description: "Номинал: 1000 M | Стоимость: 130 USDT" },
                 { id: 2, title: "Смарт-часы MITRON Watch Pro *", priceMitrons: 1231, description: "Себестоимость: 65 USDT | Наценка: x2.46 | Итого: 1231 M" },
@@ -115,7 +115,7 @@ function removeFromCart(index) {
     updateCartUI();
 }
 
-// 4. Отрисовка корзины
+// 4. Отрисовка содержимого корзины
 function updateCartUI() {
     const badge = document.getElementById('cartBadge');
     const itemsContainer = document.getElementById('cartItems');
@@ -145,10 +145,13 @@ function updateCartUI() {
     validateCartUI(totalM);
 }
 
-// 5. Валидация диапазонов (-10 M)
-function validateCartUI(totalM) {
+// 5. Валидация сумм и разрыва в -10 M по ТЗ
+async function validateCartUI(totalM) {
     const hint = document.getElementById('cartHint');
     const payBtn = document.getElementById('payBtn');
+    const userInput = document.getElementById('usernameInput');
+    const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
+
     if (!hint || !payBtn) return;
 
     if (totalM === 0) {
@@ -158,37 +161,54 @@ function validateCartUI(totalM) {
         return;
     }
 
+    // Проверка лимита заказа в рамках одной покупки
     if (totalM > 5000) {
         hint.className = 'status-alert error';
-        hint.innerText = `Превышен лимит! Максимальная сумма заказа — 5000 M. Уберите товары на ${totalM - 5000} M.`;
+        hint.innerText = `Превышен лимит! Максимальная сумма единовременного заказа — 5000 M. Уберите товары на ${totalM - 5000} M.`;
         payBtn.disabled = true;
         return;
     }
 
-    const ranges = [
-        { min: 990, max: 1000 },
-        { min: 1990, max: 2000 },
-        { min: 2990, max: 3000 },
-        { min: 3990, max: 4000 },
-        { min: 4990, max: 5000 }
-    ];
+    // Проверка накопительного лимита за все время у пользователя (макс. 5000 M)
+    if (username && username !== 'Покупатель') {
+        try {
+            const checkRes = await fetch(`${API_URL}/shop/user-purchases/${encodeURIComponent(username)}`);
+            if (checkRes.ok) {
+                const checkData = await checkRes.json();
+                if (checkData.success) {
+                    const spent = checkData.totalSpent || 0;
+                    if (spent + totalM > 5000) {
+                        hint.className = 'status-alert error';
+                        hint.innerText = `Превышен накопительный лимит! Вы уже купили товаров на ${spent} M. Максимум 5000 M до получения 100% кешбэка.`;
+                        payBtn.disabled = true;
+                        return;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка проверки накопительного лимита:', e);
+        }
+    }
 
-    const match = ranges.find(r => totalM >= r.min && totalM <= r.max);
+    // Расчет кратного шага (1000, 2000, 3000, 4000, 5000) с допуском -10 M
+    const targetBracket = Math.ceil(totalM / 1000) * 1000;
+    const currentTarget = targetBracket === 0 ? 1000 : targetBracket;
+    const minAllowed = currentTarget - 10;
 
-    if (match) {
+    if (totalM >= minAllowed && totalM <= currentTarget) {
         hint.className = 'status-alert success';
-        hint.innerText = 'Сумма корзины корректна! Покупка готова к оформлению.';
+        hint.innerText = `Сумма корзины (${totalM} M) готова к оформлению! Зачисляется ячеек: ${currentTarget / 1000} шт.`;
         payBtn.disabled = false;
-    } else {
-        let target = ranges.find(r => r.max >= totalM) || ranges[ranges.length - 1];
-        const needMore = target.min - totalM;
+    } else if (totalM < minAllowed) {
+        const minNeeded = minAllowed - totalM;
+        const maxNeeded = currentTarget - totalM;
         hint.className = 'status-alert warning';
-        hint.innerText = `Вам необходимо заполнить корзину ещё на ${needMore} Митронов.`;
+        hint.innerText = `Вам необходимо заполнить корзину ещё на ${minNeeded}–${maxNeeded} Митронов.`;
         payBtn.disabled = true;
     }
 }
 
-// 6. Оплата заказа
+// 6. Оформление оплаты
 async function processPayment() {
     const totalM = cart.reduce((sum, item) => sum + Number(item.priceMitrons || item.priceM || 0), 0);
     const payBtn = document.getElementById('payBtn');
@@ -212,7 +232,7 @@ async function processPayment() {
     if (payBtn) payBtn.disabled = true;
     if (hint) {
         hint.className = 'status-alert warning';
-        hint.innerText = 'Обработка платежа и создание заказа...';
+        hint.innerText = 'Обработка платежа и перечисление средств...';
     }
 
     try {
@@ -220,7 +240,7 @@ async function processPayment() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                username,
+                username: username,
                 sponsor: sponsorLogin,
                 totalMitrons: totalM,
                 cartItems: cart
@@ -237,6 +257,7 @@ async function processPayment() {
             cart = [];
             updateCartUI();
             loadUserOrders();
+            loadRefundStats();
             setTimeout(() => toggleCart(false), 1500);
         } else {
             throw new Error(data.error || 'Ошибка при проведении оплаты');
@@ -250,7 +271,7 @@ async function processPayment() {
     }
 }
 
-// Вспомогательный контейнер для заказов
+// Контейнер заказов
 function getOrCreateOrdersContainer() {
     let container = document.getElementById('userOrdersContainer');
     if (!container) {
@@ -263,15 +284,14 @@ function getOrCreateOrdersContainer() {
     return container;
 }
 
-// 7. Управление заказами пользователя и кнопка отказа
+// 7. Загрузка списка заказов пользователя и блокировка отмены через 33 дня
 async function loadUserOrders() {
     const ordersContainer = getOrCreateOrdersContainer();
-
     const userInput = document.getElementById('usernameInput');
     const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
 
     if (!username || username === 'Покупатель') {
-        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Укажите ваш логин для просмотра заказов и функций отказа.</p>';
+        ordersContainer.innerHTML = '<p style="color:#888; font-size:12px; text-align:center;">Укажите ваш логин для просмотра заказов и функций отмены.</p>';
         return;
     }
 
@@ -281,17 +301,17 @@ async function loadUserOrders() {
 
         const data = await res.json();
         if (data.success && data.orders && data.orders.length > 0) {
-            ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои активные заказы:</h4>' + data.orders.map(order => {
+            ordersContainer.innerHTML = '<h4 style="margin:5px 0 10px 0; font-size:14px;">Мои заказы:</h4>' + data.orders.map(order => {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
-                const isRefunded = order.status === 'REFUNDED';
+                const isRefunded = order.status === 'REFUNDED' || order.isRefunded;
                 const isExpired = diffDays >= 33;
                 const orderAmount = Number(order.totalMitrons || order.amountMitrons || 1000);
                 const safeOrderId = escapeHTML(order.id || order._id || '1');
 
                 let buttonHtml = '';
                 if (isRefunded) {
-                    buttonHtml = `<div style="font-size:12px; color:#777; text-align:center; padding:5px;">Покупка была отменена</div>`;
+                    buttonHtml = `<div style="font-size:12px; color:#e74c3c; text-align:center; padding:5px; font-weight:bold;">🚫 Покупка отменена (Возврат 100%)</div>`;
                 } else if (isExpired) {
                     buttonHtml = `
                         <button disabled style="width:100%; padding:10px; background:#95a5a6; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px; opacity:0.6;">
@@ -311,7 +331,7 @@ async function loadUserOrders() {
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                             <strong>Заказ #${safeOrderId}</strong>
                             <span style="font-size:12px; color:${isRefunded ? '#e74c3c' : '#2ecc71'}; font-weight:bold;">
-                                ${isRefunded ? '🚫 Возвращен' : '✅ Оплачен'} (${diffDays} дн.)
+                                ${isRefunded ? '🚫 Отменен' : '✅ Оплачен'} (${diffDays} дн.)
                             </span>
                         </div>
                         <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${orderAmount} M</strong></div>
@@ -328,13 +348,14 @@ async function loadUserOrders() {
     }
 }
 
+// 8. Обработка нажатия кнопки отказа от покупки
 async function refundOrder(orderId, amount) {
     const userInput = document.getElementById('usernameInput');
     const username = (userInput && userInput.value.trim()) || localStorage.getItem('mitron_user');
 
     if (!username) return alert('Пожалуйста, укажите ваш логин');
 
-    if (!confirm('Вы действительно хотите отказаться от покупки? Средства будут возвращены в полном объеме, а выкупленный объем передается Администратору.')) {
+    if (!confirm('Вы действительно хотите отказаться от покупки? Вам гарантирован 100% возврат средств, а выкупленный товар и место переходят Администратору.')) {
         return;
     }
 
@@ -347,9 +368,10 @@ async function refundOrder(orderId, amount) {
 
         const data = await res.json();
         if (res.ok && data.success) {
-            alert('Отказ оформлен! Покупка отменена, средства возвращены.');
+            alert('Отказ успешно зафиксирован! Средства возвращены в полном объеме.');
             loadUserOrders();
             loadRefundStats();
+            updateCartUI();
         } else {
             alert(`Ошибка отказа: ${data.error || 'Неизвестная ошибка'}`);
         }
@@ -359,7 +381,7 @@ async function refundOrder(orderId, amount) {
     }
 }
 
-// 8. Авторизация и модальные окна
+// 9. Авторизация и переключение окон
 function checkAuthStatus() {
     const user = localStorage.getItem('mitron_user');
     const authBtn = document.getElementById('authBtn');
@@ -379,6 +401,7 @@ function handleAuthClick() {
         localStorage.setItem('mitron_user', username.trim());
         checkAuthStatus();
         loadUserOrders();
+        updateCartUI();
     }
 }
 
@@ -395,7 +418,7 @@ function toggleModal(open) {
     }
 }
 
-// 9. Работа с Генератором Робота
+// 10. Управление Роботом-генератором
 async function fetchBotStatus() {
     const statusLabel = document.getElementById('statusLabel');
     const actionBtn = document.getElementById('actionBtn');
@@ -435,7 +458,7 @@ async function toggleBot(enable) {
     }
 }
 
-// Глобальные экспортные мосты
+// Регистрируем глобальные функции для вызова из HTML
 window.addToCart = addToCart;
 window.removeFromCart = removeFromCart;
 window.processPayment = processPayment;
