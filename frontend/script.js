@@ -196,7 +196,6 @@ function validateCartUI(totalM) {
         let target = ranges.find(r => r.max >= totalM);
         if (!target) target = ranges[ranges.length - 1];
 
-        // Точный расчет разрыва в 10 M
         const diffMin = target.min - totalM;
         const diffMax = target.max - totalM;
 
@@ -236,7 +235,7 @@ async function processPayment() {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд таймаут
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
         const res = await fetch(`${API_URL}/shop/checkout`, {
@@ -320,9 +319,25 @@ async function loadUserOrders() {
                 const createdDate = new Date(order.createdAt || Date.now());
                 const diffDays = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
                 
-                // Проверка 33 дней
-                const canRefund = diffDays <= 33 && order.status !== 'REFUNDED';
                 const isRefunded = order.status === 'REFUNDED';
+                const canRefund = diffDays <= 33 && !isRefunded;
+
+                let buttonHtml = '';
+                if (isRefunded) {
+                    buttonHtml = `<div style="font-size:12px; color:#777; text-align:center; padding:5px;">Покупка была отменена</div>`;
+                } else if (!canRefund) {
+                    buttonHtml = `
+                        <button disabled style="width:100%; padding:10px; background:#95a5a6; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:not-allowed; font-size:13px; margin-top:5px; opacity:0.6;">
+                            🚫 Срок возврата истек (33 дня)
+                        </button>
+                    `;
+                } else {
+                    buttonHtml = `
+                        <button onclick="refundOrder('${order.id || order._id}')" style="width:100%; padding:10px; background:#e74c3c; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:13px; margin-top:5px;">
+                            🚫 Отказаться от покупки (Возврат)
+                        </button>
+                    `;
+                }
 
                 return `
                     <div style="background:#f9f9f9; border:1px solid ${isRefunded ? '#e74c3c' : '#ddd'}; padding:12px; border-radius:8px; margin-bottom:10px;">
@@ -333,13 +348,7 @@ async function loadUserOrders() {
                             </span>
                         </div>
                         <div style="font-size:14px; margin-bottom:8px;">Сумма: <strong>${order.totalMitrons || order.amountMitrons || 1000} M</strong></div>
-                        ${!isRefunded ? `
-                            <button 
-                                ${canRefund ? `onclick="refundOrder('${order.id || order._id}')"` : 'disabled'}
-                                style="width:100%; padding:10px; background:${canRefund ? '#e74c3c' : '#ccc'}; color:#fff; border:none; border-radius:5px; font-weight:bold; cursor:${canRefund ? 'pointer' : 'not-allowed'}; font-size:13px; margin-top:5px;">
-                                🚫 Отказаться от покупки (Возврат)
-                            </button>
-                        ` : ''}
+                        ${buttonHtml}
                     </div>
                 `;
             }).join('');
