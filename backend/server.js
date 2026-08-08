@@ -20,6 +20,9 @@ const PORT = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
+// Секретный ключ для связи с Сайтом 2
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET || "alprok8922399_mitron_secret_key";
+
 // Хранилище накопленных покупок по логинам (макс 5000 M на логин)
 const userPurchasesTotal = {};
 const userOrdersStore = {};
@@ -49,7 +52,7 @@ let robotTimeout = null;
 let liveLogs = [];
 
 // Адрес Сайта 2 на Render
-const SITE2_URL = 'https://site-2-tree.onrender.com';
+const SITE2_URL = process.env.SITE2_URL || 'https://site-2-tree.onrender.com';
 
 function logEvent(message) {
     liveLogs.push(message);
@@ -98,7 +101,10 @@ async function registerBatch(requestedBatchSize) {
 
             const res = await fetch(`${SITE2_URL}/api/shop/register`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'x-internal-key': INTERNAL_SECRET
+                },
                 body: JSON.stringify({ username: botName, unitsCount: 1, amountMitrons: 1000 })
             });
 
@@ -225,7 +231,6 @@ app.post('/api/shop/pay', async (req, res) => {
         });
     }
 
-    // Жесткая проверка накопительного лимита в 5000 M по ТЗ
     if (currentSpent + validation.totalMitrons > 5000) {
         return res.status(400).json({
             success: false,
@@ -238,7 +243,10 @@ app.post('/api/shop/pay', async (req, res) => {
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET
+            },
             body: JSON.stringify({ 
                 username: cleanUser, 
                 hashId: hashId,
@@ -262,7 +270,6 @@ app.post('/api/shop/pay', async (req, res) => {
             return res.status(400).json({ success: false, error: site2Data.error });
         }
 
-        // Обновляем накопительный баланс пользователя
         userPurchasesTotal[cleanUser] = currentSpent + validation.totalMitrons;
         if (!userOrdersStore[cleanUser]) userOrdersStore[cleanUser] = [];
         userOrdersStore[cleanUser].push({
@@ -273,7 +280,6 @@ app.post('/api/shop/pay', async (req, res) => {
             createdAt: new Date().toISOString()
         });
 
-        // Расчет финансов по ТЗ
         const financeData = calculatePurchaseFinance(cleanUser, cleanSponsor, validation.totalMitrons, null, !!site2Data.hasBranchLeader);
 
         return res.json({ 
@@ -339,7 +345,6 @@ app.post('/api/shop/checkout', async (req, res) => {
         });
     }
 
-    // Жесткая проверка накопительного лимита в 5000 M
     if (currentSpent + validation.totalMitrons > 5000) {
         return res.status(400).json({
             success: false,
@@ -352,7 +357,10 @@ app.post('/api/shop/checkout', async (req, res) => {
     try {
         const site2Res = await fetch(`${SITE2_URL}/api/shop/register`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET
+            },
             body: JSON.stringify({ 
                 username: cleanUser,
                 hashId: hashId,
@@ -418,10 +426,8 @@ app.post('/api/shop/refund', async (req, res) => {
     const cleanUser = username.trim();
     const userOrders = userOrdersStore[cleanUser] || [];
     
-    // Ищем точный заказ
     const targetOrder = userOrders.find(o => String(o.id) === String(orderId));
 
-    // Жесткая проверка 33-дневного лимита
     if (targetOrder && targetOrder.createdAt) {
         const orderDate = new Date(targetOrder.createdAt).getTime();
         const daysPassed = (Date.now() - orderDate) / (1000 * 60 * 60 * 24);
@@ -447,11 +453,13 @@ app.post('/api/shop/refund', async (req, res) => {
 
     logRefund(cleanUser, refundAmount);
 
-    // Передаем точное количество единиц на Сайт 2
     try {
         await fetch(`${SITE2_URL}/api/admin/refund-user`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-internal-key': INTERNAL_SECRET
+            },
             body: JSON.stringify({ 
                 username: cleanUser,
                 orderId: orderId,
@@ -463,7 +471,6 @@ app.post('/api/shop/refund', async (req, res) => {
         console.error('Ошибка отправки сигнала отмены на Сайт 2:', e);
     }
 
-    // Обновляем статус заказа
     if (userOrdersStore[cleanUser]) {
         userOrdersStore[cleanUser] = userOrdersStore[cleanUser].map(o => {
             if (String(o.id) === String(orderId) || !orderId) {
@@ -473,7 +480,6 @@ app.post('/api/shop/refund', async (req, res) => {
         });
     }
 
-    // Сбрасываем/уменьшаем накопленную сумму покупок при отказе
     if (userPurchasesTotal[cleanUser]) {
         userPurchasesTotal[cleanUser] = Math.max(0, userPurchasesTotal[cleanUser] - refundAmount);
     }
